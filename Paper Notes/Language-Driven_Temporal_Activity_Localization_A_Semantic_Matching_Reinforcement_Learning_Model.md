@@ -23,3 +23,30 @@
 * 目标：从未修剪视频中抽取语义上比较重要的片段
 * 一般将此问题视为分类问题(是否重要)
 * 本文使用自然语言描述来定位动作
+## Methodology
+### Semantic Concept Learning
+#### 构建词汇表
+* TACoS中的Attribute annotations
+* Charades-STA、DiDeMo的sentence中抽取名词、形容词、动词和数字作为semantic concepts
+#### 分类
+* 基于多标签分类模型
+* 基于Faster R-CNN模型
+### Semantic Matching Reinforcement Learning
+* skip-thoughts编码查询语句
+* VGG-16提取视频帧的global context feature，和semantic concept、location embedding拼接嵌入，输入LSTM
+* 上述两项拼接
+#### State and Action Space
+1. candidate detection
+2. matching score
+3. binary prediction indicator
+#### Semantic Matching
+交叉熵损失
+### Location Regression Loss
+为了预测结果更准确，每个时间步都使用反向传播
+#### 边界回归损失
+#### 帧级别回归损失
+### Reward
+prediction indicator和observation location**不可导**，不能使用反向传播，所以使用强化学习
+
+## Experiments
+## Conclusion and Future Work
