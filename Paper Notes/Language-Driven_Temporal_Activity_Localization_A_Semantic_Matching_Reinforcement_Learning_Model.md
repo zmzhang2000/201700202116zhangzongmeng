@@ -14,3 +14,12 @@
 * 提出基于RNN的语言驱动时序行为检测强化学习模型
 * 引入中层语义概念联系视觉和语义信息
 * 提高效果和速度
+## Related Work
+### Temporal Action Detection
+* 生成temporal video proposals，然后对每个proposal的动作分类
+* 弱监督学习
+* 强化学习
+### Temporal Action Proposal Generation
+* 目标：从未修剪视频中抽取语义上比较重要的片段
+* 一般将此问题视为分类问题(是否重要)
+* 本文使用自然语言描述来定位动作
