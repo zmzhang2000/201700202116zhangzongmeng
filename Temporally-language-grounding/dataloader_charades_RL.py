@@ -19,7 +19,7 @@ class Charades_Train_dataset(torch.utils.data.Dataset):
         self.visual_feature_dim = 4096
         self.sent_vec_dim = 4800
         self.sliding_clip_path = "./Dataset/Charades/all_fc6_unit16_overlap0.5/"
-        self.clip_sentence_pairs_iou_all = pickle.load(open("./Dataset/Charades/ref_info/charades_rl_train_feature.pkl"))
+        self.clip_sentence_pairs_iou_all = pickle.load(open("./Dataset/Charades/ref_info/charades_rl_train_feature.pkl",'rb'),encoding='iso-8859-1')
 
         self.num_samples_iou = len(self.clip_sentence_pairs_iou_all)
         print((self.num_samples_iou, "iou clip-sentence pairs are readed"))  # 49442
@@ -44,7 +44,7 @@ class Charades_Train_dataset(torch.utils.data.Dataset):
             curr_start += unit_size
 
         original_feats = np.zeros([300, feats_dimen], dtype=np.float32)
-        original_feats_1 = np.zeros([num_units, feats_dimen], dtype=np.float32)
+        original_feats_1 = np.zeros([int(num_units), feats_dimen], dtype=np.float32)
         for k, (curr_s, curr_e) in enumerate(start_end_list):
             one_feat = np.load(self.sliding_clip_path + movie_name + "_" + str(curr_s) + ".0_" + str(curr_e) + ".0.npy")
             original_feats[k] = one_feat
@@ -125,7 +125,7 @@ class Charades_Test_dataset(torch.utils.data.Dataset):
         self.sent_vec_dim = 4800
         self.epochs_completed = 0
 
-        self.clip_sentence_pairs = pickle.load(open("./Dataset/Charades/ref_info/charades_sta_test_semantic_sentence_VP_sub_obj.pkl"))
+        self.clip_sentence_pairs = pickle.load(open("./Dataset/Charades/ref_info/charades_sta_test_semantic_sentence_VP_sub_obj.pkl",'rb'),encoding='iso-8859-1')
         print(str(len(self.clip_sentence_pairs)) + " test videos are readed")  # 1334
 
         movie_names_set = set()
