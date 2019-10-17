@@ -1,8 +1,6 @@
 " Train and test file for Reinforcement Learning based methods (A2C) for Charades-STA dataset \
 : Read,Watch, and Move Reinforcement Learning for Temporally Grounding Natural Language Descriptions in video (https://arxiv.org/abs/1901.06829) "
 
-
-
 import torch.nn.functional as F
 import os
 import argparse
@@ -11,13 +9,16 @@ from dataloader_charades_RL import Charades_Train_dataset, Charades_Test_dataset
 from model_A2C import A2C
 import random
 import matplotlib
-matplotlib.use("Agg")
 import matplotlib.pyplot as plt
+
+os.environ['CUDA_VISIBLE_DEVICES'] = '0'
+matplotlib.use("Agg")
 plt.rcParams['figure.figsize'] = (8.0, 4.0)
 
 parser = argparse.ArgumentParser(description='Video Grounding of PyTorch')
 parser.add_argument('--model', type=str, default='A2C', help='model type')
 parser.add_argument('--dataset', type=str, default='Charades', help='dataset type')
+parser.add_argument('--data_path', type=str, default='/home/share/hanxianjing/charades-features/', help='dataset path')
 parser.add_argument('--batch_size', default=64, type=int, help='batch size')
 parser.add_argument('--lr', default=0.001, type=float, help='learning rate')
 parser.add_argument('--resume', '-r', action='store_true', help='resume from checkpoint')
@@ -32,24 +33,25 @@ opt = parser.parse_args()
 path = os.path.join(opt.dataset + '_' + opt.model)
 
 if not os.path.exists(path):
-        os.makedirs(path)
+    os.makedirs(path)
 
-train_dataset = Charades_Train_dataset()
-test_dataset = Charades_Test_dataset()
+train_dataset = Charades_Train_dataset(opt.data_path)
+test_dataset = Charades_Test_dataset(opt.data_path)
 
-num_train_batches = int(len(train_dataset)/opt.batch_size)
-print ("num_train_batches:", num_train_batches)
+num_train_batches = int(len(train_dataset) / opt.batch_size)
+print("num_train_batches:", num_train_batches)
 
 trainloader = torch.utils.data.DataLoader(dataset=train_dataset,
-                                           batch_size=opt.batch_size,
-                                           shuffle=True,
-                                           num_workers=4)
+                                          batch_size=opt.batch_size,
+                                          shuffle=True,
+                                          num_workers=4)
 
 # Model
 if opt.model == 'A2C':
     net = A2C().cuda()
 
 optimizer = torch.optim.Adam(net.parameters(), lr=opt.lr)
+
 
 def setup_seed(seed):
     torch.manual_seed(seed)
@@ -58,6 +60,7 @@ def setup_seed(seed):
     random.seed(seed)
     torch.backends.cudnn.deterministic = True
     torch.backends.cudnn.benchmark = True
+
 
 setup_seed(0)
 best_R1_IOU7 = 0
@@ -129,7 +132,6 @@ def determine_range_test(action, current_offset, ten_unit, num_units):
 
 
 def determine_range(action, current_offset, ten_unit, num_units):
-
     batch_size = len(action)
     current_offset_start_batch = np.zeros(batch_size, dtype=np.int8)
     current_offset_end_batch = np.zeros(batch_size, dtype=np.int8)
@@ -147,7 +149,7 @@ def determine_range(action, current_offset, ten_unit, num_units):
         num_units_index = num_units[i]
         action_index = action[i]
 
-        if current_offset_end < 0 or current_offset_start > num_units_index or current_offset_end <= current_offset_start or action_index ==6:
+        if current_offset_end < 0 or current_offset_start > num_units_index or current_offset_end <= current_offset_start or action_index == 6:
             abnormal_done = True
         else:
 
@@ -166,7 +168,7 @@ def determine_range(action, current_offset, ten_unit, num_units):
             elif action_index == 5:
                 current_offset_end = current_offset_end - ten_unit_index
             else:
-                abnormal_done = True #stop
+                abnormal_done = True  # stop
 
             if current_offset_start < 0:
                 current_offset_start = 0
@@ -201,18 +203,21 @@ def determine_range(action, current_offset, ten_unit, num_units):
 
     return current_offset_start_batch, current_offset_end_batch, update_offset, update_offset_norm, abnormal_done_batch
 
+
 # Training
 def train(epoch):
     net.train()
     train_loss = 0
     policy_loss_epoch = []
-    value_loss_epoch =[]
+    value_loss_epoch = []
     total_rewards_epoch = []
 
-    for batch_idx, (global_feature, original_feats, initial_feature, sentence, offset_norm, initial_offset, initial_offset_norm, ten_unit, num_units) in enumerate(trainloader):
+    for batch_idx, (
+            global_feature, original_feats, initial_feature, sentence, offset_norm, initial_offset, initial_offset_norm,
+            ten_unit, num_units) in enumerate(trainloader):
 
         global_feature, original_feats, initial_feature, sentence, offset_norm, initial_offset, initial_offset_norm, ten_unit, num_units = global_feature.cuda(), \
-         original_feats.cuda(), initial_feature.cuda(), sentence.cuda(), offset_norm.cuda(), initial_offset.cuda(), initial_offset_norm.cuda(), ten_unit.cuda(), num_units.cuda()
+                                                                                                                                           original_feats.cuda(), initial_feature.cuda(), sentence.cuda(), offset_norm.cuda(), initial_offset.cuda(), initial_offset_norm.cuda(), ten_unit.cuda(), num_units.cuda()
 
         batch_size = len(global_feature)
         entropies = torch.zeros(opt.num_steps, batch_size)
@@ -224,7 +229,7 @@ def train(epoch):
         locations = torch.zeros(opt.num_steps, batch_size, 2)
         mask = torch.zeros(opt.num_steps, batch_size)
 
-        #network forward
+        # network forward
         for step in range(opt.num_steps):
 
             if step == 0:
@@ -233,17 +238,19 @@ def train(epoch):
                 current_offset = initial_offset
                 current_offset_norm = initial_offset_norm
 
-            hidden_state, logit, value, tIoU, location = net(global_feature, current_feature, sentence, current_offset_norm, hidden_state)
+            hidden_state, logit, value, tIoU, location = net(global_feature, current_feature, sentence,
+                                                             current_offset_norm, hidden_state)
 
             prob = F.softmax(logit, dim=1)
             log_prob = F.log_softmax(logit, dim=1)
             entropy = -(log_prob * prob).sum(1)
-            entropies[step,:] = entropy
+            entropies[step, :] = entropy
 
             action = prob.multinomial(num_samples=1).data
             log_prob = log_prob.gather(1, action)
             action = action.cpu().numpy()[:, 0]
-            current_offset_start, current_offset_end, current_offset, current_offset_norm, abnormal_done = determine_range(action, current_offset, ten_unit, num_units)
+            current_offset_start, current_offset_end, current_offset, current_offset_norm, abnormal_done = determine_range(
+                action, current_offset, ten_unit, num_units)
 
             if step == 0:
                 Previou_IoU = calculate_RL_IoU_batch(initial_offset_norm, offset_norm)
@@ -259,11 +266,11 @@ def train(epoch):
             for i in range(batch_size):
                 abnormal = abnormal_done[i]
                 if abnormal == 1:
-                    current_feature_med = original_feats[i][(current_offset_start[i]):(current_offset_end[i]+1)]
+                    current_feature_med = original_feats[i][(current_offset_start[i]):(current_offset_end[i] + 1)]
                     current_feature_med = torch.mean(current_feature_med, dim=0)
                     current_feature[i] = current_feature_med
 
-            reward = calculate_reward_batch_withstop(Previou_IoU, current_IoU, step+1)
+            reward = calculate_reward_batch_withstop(Previou_IoU, current_IoU, step + 1)
             values[step, :] = value.squeeze(1)
             log_probs[step, :] = log_prob.squeeze(1)
             rewards[step, :] = reward
@@ -277,7 +284,7 @@ def train(epoch):
         idx = 0
         for j in range(
                 batch_size):
-            mask_one = mask[:,j]
+            mask_one = mask[:, j]
             index = opt.num_steps
             for i in range(opt.num_steps):
                 if mask_one[i] == 0:
@@ -285,7 +292,7 @@ def train(epoch):
                     break
 
             for k in reversed(list(range(index))):
-                if k == index-1:
+                if k == index - 1:
                     R = opt.gamma * values[k][j] + rewards[k][j]
                 else:
                     R = opt.gamma * R + rewards[k][j]
@@ -294,7 +301,7 @@ def train(epoch):
 
                 value_loss = value_loss + advantage.pow(2)
                 policy_loss = policy_loss - log_probs[k][j] * advantage - opt.entropy_coef * entropies[k][j]
-                idx +=1
+                idx += 1
 
         policy_loss /= idx
         value_loss /= idx
@@ -307,31 +314,32 @@ def train(epoch):
         mask_1 = np.zeros_like(Previous_IoUs)
         for i in range(len(Previous_IoUs)):
             for j in range(len(Previous_IoUs[i])):
-                iou_id +=1
-                iou_loss += torch.abs(Previous_IoUs[i,j] - Predict_IoUs[i,j])
-                mask_1[i,j] = Previous_IoUs[i,j] > 0.4
-        iou_loss/= iou_id
+                iou_id += 1
+                iou_loss += torch.abs(Previous_IoUs[i, j] - Predict_IoUs[i, j])
+                mask_1[i, j] = Previous_IoUs[i, j] > 0.4
+        iou_loss /= iou_id
 
         loc_loss = 0
         loc_id = 0
         for i in range(len(mask_1)):
             for j in range(len(mask_1[i])):
-                if mask_1[i,j] ==1:
-                    loc_loss += (torch.abs(offset_norm[j][0].cpu() - locations[i][j][0]) + torch.abs(offset_norm[j][1].cpu() - locations[i][j][1]))
-                    loc_id +=1
-        loc_loss/= loc_id
+                if mask_1[i, j] == 1:
+                    loc_loss += (torch.abs(offset_norm[j][0].cpu() - locations[i][j][0]) + torch.abs(
+                        offset_norm[j][1].cpu() - locations[i][j][1]))
+                    loc_id += 1
+        loc_loss /= loc_id
 
         optimizer.zero_grad()
-        (policy_loss + value_loss + iou_loss + loc_loss).backward(retain_graph = True)
+        (policy_loss + value_loss + iou_loss + loc_loss).backward(retain_graph=True)
         optimizer.step()
 
-        print("Train Epoch: %d | Index: %d | policy loss: %f" % (epoch, batch_idx+1, policy_loss.item()))
-        print("Train Epoch: %d | Index: %d | value_loss: %f" % (epoch, batch_idx+1, value_loss.item()))
+        print("Train Epoch: %d | Index: %d | policy loss: %f" % (epoch, batch_idx + 1, policy_loss.item()))
+        print("Train Epoch: %d | Index: %d | value_loss: %f" % (epoch, batch_idx + 1, value_loss.item()))
 
         # test(epoch)
-        print("Train Epoch: %d | Index: %d | iou_loss: %f" % (epoch, batch_idx+1, iou_loss.item()))
-        if loc_loss >0:
-            print("Train Epoch: %d | Index: %d | location_loss: %f" % (epoch, batch_idx+1, loc_loss.item()))
+        print("Train Epoch: %d | Index: %d | iou_loss: %f" % (epoch, batch_idx + 1, iou_loss.item()))
+        if loc_loss > 0:
+            print("Train Epoch: %d | Index: %d | location_loss: %f" % (epoch, batch_idx + 1, loc_loss.item()))
 
     ave_policy_loss = sum(policy_loss_epoch) / len(policy_loss_epoch)
     ave_policy_loss_all.append(ave_policy_loss)
@@ -341,11 +349,9 @@ def train(epoch):
     ave_value_loss_all.append(ave_value_loss)
     print("Average Value Loss for Train Epoch %d : %f" % (epoch, ave_value_loss))
 
-
     ave_total_rewards_epoch = sum(total_rewards_epoch) / len(total_rewards_epoch)
     ave_total_rewards_all.append(ave_total_rewards_epoch)
     print("Average Total reward for Train Epoch %d: %f" % (epoch, ave_total_rewards_epoch))
-
 
     with open(path + "/iteration_ave_reward.pkl", "wb") as file:
         pickle.dump(ave_total_rewards_all, file)
@@ -369,7 +375,7 @@ def train(epoch):
     plt.xlabel("Iteration")
     plt.title("Average Policy Loss iteration")
     plt.xticks(fontsize=8)
-    plt.savefig(path+ "/iteration_ave_policy_loss.png")
+    plt.savefig(path + "/iteration_ave_policy_loss.png")
     plt.close(1)
 
     with open(path + "/iteration_ave_value_loss.pkl", "wb") as file:
@@ -384,8 +390,8 @@ def train(epoch):
     plt.savefig(path + "/iteration_ave_value_loss.png")
     plt.close(1)
 
-def test(epoch):
 
+def test(epoch):
     global best_R1_IOU7
     global best_R1_IOU5
     global best_R1_IOU7_epoch
@@ -404,7 +410,7 @@ def test(epoch):
         # movie_length = test_dataset.movie_length_info[movie_name.split(".")[0]]
         print("Test movie: " + movie_name + "....loading movie data")
 
-        movie_clip_sentences, global_feature, original_feats, initial_feature, initial_offset, initial_offset_norm, ten_unit, num_units\
+        movie_clip_sentences, global_feature, original_feats, initial_feature, initial_offset, initial_offset_norm, ten_unit, num_units \
             = test_dataset.load_movie_slidingclip(movie_name)
 
         global_feature = torch.from_numpy(global_feature).cuda().unsqueeze(0)
@@ -434,7 +440,8 @@ def test(epoch):
                     current_offset_norm = initial_offset_norm
 
                 # hidden_state, logit, value = net(global_feature, current_feature, sent_vec, current_offset_norm, hidden_state)
-                hidden_state, logit, value, tIoU, location = net(global_feature, current_feature, sent_vec, current_offset_norm, hidden_state)
+                hidden_state, logit, value, tIoU, location = net(global_feature, current_feature, sent_vec,
+                                                                 current_offset_norm, hidden_state)
 
                 prob = F.softmax(logit, dim=1)
                 action = prob.max(1, keepdim=True)[1].data.cpu().numpy()[0, 0]
@@ -473,7 +480,6 @@ def test(epoch):
         test_result_output.write("Epoch " + str(epoch) + ": IoU=" + str(IoU_thresh[k]) + ", R@1: " + str(
             all_correct_num_1[k] / all_retrievd) + "\n")
 
-
     R1_IOU7 = all_correct_num_1[3] / all_retrievd
     R1_IOU5 = all_correct_num_1[2] / all_retrievd
 
@@ -482,7 +488,6 @@ def test(epoch):
 
     R1_IOU5_all.append(R1_IOU5)
     print("R1_IOU5 for Train Epoch %d : %f" % (epoch, R1_IOU5))
-
 
     with open(path + "/R1_IOU7_all.pkl", "wb") as file:
         pickle.dump(R1_IOU7_all, file)
@@ -506,7 +511,7 @@ def test(epoch):
     plt.xlabel("epoch")
     plt.title("R1_IOU5_all")
     plt.xticks(fontsize=8)
-    plt.savefig(path+ "/R1_IOU5_all.png")
+    plt.savefig(path + "/R1_IOU5_all.png")
     plt.close(1)
 
     if R1_IOU7 > best_R1_IOU7:
@@ -517,7 +522,7 @@ def test(epoch):
         }
         if not os.path.isdir(path):
             os.mkdir(path)
-        torch.save(state, os.path.join(path,'best_R1_IOU7_model.t7'))
+        torch.save(state, os.path.join(path, 'best_R1_IOU7_model.t7'))
         best_R1_IOU7 = R1_IOU7
         best_R1_IOU7_epoch = epoch
 
@@ -529,7 +534,7 @@ def test(epoch):
         }
         if not os.path.isdir(path):
             os.mkdir(path)
-        torch.save(state, os.path.join(path,'best_R1_IOU5_model.t7'))
+        torch.save(state, os.path.join(path, 'best_R1_IOU5_model.t7'))
         best_R1_IOU5 = R1_IOU5
         best_R1_IOU5_epoch = epoch
 
@@ -539,16 +544,15 @@ if __name__ == '__main__':
     total_epoch = 100
     ave_policy_loss_all = []
     ave_value_loss_all = []
-    ave_total_rewards_all =[]
+    ave_total_rewards_all = []
 
     R1_IOU7_all = []
     R1_IOU5_all = []
 
-    test_result_output=open(os.path.join(path,"A2C_results.txt"), "w")
+    test_result_output = open(os.path.join(path, "A2C_results.txt"), "w")
     for epoch in range(start_epoch, total_epoch):
         train(epoch)
         test(epoch)
 
 print("best_R1_IOU7: %0.3f in epoch: %d " % (best_R1_IOU7, best_R1_IOU7_epoch))
 print("best_R1_IOU5: %0.3f in epoch: %d " % (best_R1_IOU5, best_R1_IOU5_epoch))
-
