@@ -268,7 +268,7 @@ def train(epoch):
             log_probs[step, :] = log_prob.squeeze(1)
             rewards[step, :] = reward
             locations[step, :] = location
-            Predict_IoUs[step, :] = tIoU
+            Predict_IoUs[step, :] = tIoU.squeeze()
 
         total_rewards_epoch.append(rewards.sum())
 
@@ -299,8 +299,8 @@ def train(epoch):
         policy_loss /= idx
         value_loss /= idx
 
-        policy_loss_epoch.append(policy_loss.data[0])
-        value_loss_epoch.append(value_loss.data[0])
+        policy_loss_epoch.append(policy_loss.item())
+        value_loss_epoch.append(value_loss.item())
 
         iou_loss = 0
         iou_id = 0
@@ -325,13 +325,13 @@ def train(epoch):
         (policy_loss + value_loss + iou_loss + loc_loss).backward(retain_graph = True)
         optimizer.step()
 
-        print("Train Epoch: %d | Index: %d | policy loss: %f" % (epoch, batch_idx+1, policy_loss.data[0]))
-        print("Train Epoch: %d | Index: %d | value_loss: %f" % (epoch, batch_idx+1, value_loss.data[0]))
+        print("Train Epoch: %d | Index: %d | policy loss: %f" % (epoch, batch_idx+1, policy_loss.item()))
+        print("Train Epoch: %d | Index: %d | value_loss: %f" % (epoch, batch_idx+1, value_loss.item()))
 
         # test(epoch)
-        print("Train Epoch: %d | Index: %d | iou_loss: %f" % (epoch, batch_idx+1, iou_loss.data[0]))
+        print("Train Epoch: %d | Index: %d | iou_loss: %f" % (epoch, batch_idx+1, iou_loss.item()))
         if loc_loss >0:
-            print("Train Epoch: %d | Index: %d | location_loss: %f" % (epoch, batch_idx+1, loc_loss.data[0]))
+            print("Train Epoch: %d | Index: %d | location_loss: %f" % (epoch, batch_idx+1, loc_loss.item()))
 
     ave_policy_loss = sum(policy_loss_epoch) / len(policy_loss_epoch)
     ave_policy_loss_all.append(ave_policy_loss)
