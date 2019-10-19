@@ -20,15 +20,43 @@ class Charades_Train_dataset(torch.utils.data.Dataset):
         self.context_size = 128
         self.visual_feature_dim = 4096
         self.sent_vec_dim = 4800
+
         self.sliding_clip_path = os.path.join(self.data_path, "all_fc6_unit16_overlap0.5/")
+        '''
+        all_fc6_unit16_overlap0.5/每个视频的滑动窗口特征(numpy数组，每个滑动窗口作为一个unit提取特征)
+        MovieName_StartFrame.0_EndFrame.0.npy"
+        窗口大小为unit_size=16
+        滑动步长为8
+        帧编号从1开始
+        '''
+
         self.clip_sentence_pairs_iou_all = pickle.load(
             open(os.path.join(self.data_path, "charades_rl_train_feature_all.pkl"), 'rb'), encoding='iso-8859-1')
+        ''' 
+        charades_rl_train_feature_all: [item0, item1...]
+        
+        item: 
+        {'frames_num': 496,
+         'num_units': 31,
+         'offset_end': 101,
+         'offset_end_norm': 0.20362903225806453,
+         'offset_start': 0,
+         'offset_start_norm': 0.0,
+         'proposal_or_sliding_window': 'AO8RW_1_129',
+         'sent_skip_thought_vec': [array([[-0.00339404,  0.00549818, -0.00043744, ...,  0.08359446,
+                 0.00238644,  0.01462354]], dtype=float32)],
+         'sentence': 'a person is putting a book on a shelf.',
+         'video': 'AO8RW'}
+         
+         item['sent_skip_thought_vec']: [numpy.array(shape:[1,4800])]
+        '''
 
         self.num_samples_iou = len(self.clip_sentence_pairs_iou_all)
         print((self.num_samples_iou, "iou clip-sentence pairs are readed"))  # 49442
 
     def read_video_level_feats(self, movie_name, end):
         # read unit level feats by just passing the start and end number
+        # 将视频切割为unit提取特征
         unit_size = 16
         feats_dimen = 4096
         start = 1
@@ -56,8 +84,8 @@ class Charades_Train_dataset(torch.utils.data.Dataset):
         # print(np.shape(original_feats))
         global_feature = np.mean(original_feats_1, axis=0)
 
+        # 选取[N/4,3N/4]作为初始边界并提取特征local_feature(取边界内所有unit特征平均)
         initial_feature = original_feats[(oneinfour_unit - 1):(threeinfour_unit)]
-
         initial_feature = np.mean(initial_feature, axis=0)
 
         initial_offset_start = oneinfour_unit - 1
@@ -133,6 +161,20 @@ class Charades_Test_dataset(torch.utils.data.Dataset):
             open(os.path.join(self.data_path, "ref_info/charades_sta_test_semantic_sentence_VP_sub_obj.pkl"), 'rb'),
             encoding='iso-8859-1')
         print(str(len(self.clip_sentence_pairs)) + " test videos are readed")  # 1334
+        '''
+        charades_sta_test_semantic_sentence_VP_sub_obj.pkl: {MovieName:{FeatureFileName:[feature]}}
+        feature:
+        {'VP_skip_thought_vec': [],
+         'VP_spacy_vec_one_by_one_word': [],
+         'dobj_or_VP': [],
+         'obj': [],
+         'obj_spacy_vec': [],
+         'sent_skip_thought_vec': [numpy.array(shape:[1,4800],dtype=float32)],
+         'sent_spacy_vec': [numpy.array(shape:[300,],dtype=float32)],
+         'sentence': 'person close the door.',
+         'subj': [],
+         'subj_spacy_vec': []}
+        '''
 
         movie_names_set = set()
         for ii in self.clip_sentence_pairs:
@@ -147,6 +189,12 @@ class Charades_Test_dataset(torch.utils.data.Dataset):
         with open(os.path.join(self.data_path, "ref_info/charades_movie_length_info.txt"))  as f:
             for l in f:
                 self.movie_length_dict[l.rstrip().split(" ")[0]] = float(l.rstrip().split(" ")[1])
+        '''charades_movie_length_info.txt:
+        46GP8 24.92 597
+        N11GT 18.44 459
+        0IH69 30.33 757
+        ......
+        '''
 
     def read_video_level_feats(self, movie_name, end):
         # read unit level feats by just passing the start and end number

@@ -130,7 +130,7 @@ def determine_range_test(action, current_offset, ten_unit, num_units):
 
     return current_offset_start, current_offset_end, update_offset, update_offset_norm, abnormal_done
 
-
+# 根据当前边界选择下一边界
 def determine_range(action, current_offset, ten_unit, num_units):
     batch_size = len(action)
     current_offset_start_batch = np.zeros(batch_size, dtype=np.int8)
@@ -276,14 +276,17 @@ def train(epoch):
             rewards[step, :] = reward
             locations[step, :] = location
             Predict_IoUs[step, :] = tIoU.squeeze()
+            # 每一列为mini-batch中的一个样本，每一行为一个step
 
+        # Reinforcement Learning
         total_rewards_epoch.append(rewards.sum())
 
-        policy_loss = 0
-        value_loss = 0
+        policy_loss = 0     # LA(θΠ)
+        value_loss = 0      # LC(θv)
         idx = 0
-        for j in range(
-                batch_size):
+        # 对mini-batch中的每个样本
+        for j in range(batch_size):
+            # 寻找结束step
             mask_one = mask[:, j]
             index = opt.num_steps
             for i in range(opt.num_steps):
@@ -291,6 +294,7 @@ def train(epoch):
                     index = i + 1
                     break
 
+            # 从结束step倒序计算
             for k in reversed(list(range(index))):
                 if k == index - 1:
                     R = opt.gamma * values[k][j] + rewards[k][j]
@@ -309,6 +313,7 @@ def train(epoch):
         policy_loss_epoch.append(policy_loss.item())
         value_loss_epoch.append(value_loss.item())
 
+        # Supervised Learning
         iou_loss = 0
         iou_id = 0
         mask_1 = np.zeros_like(Previous_IoUs)
