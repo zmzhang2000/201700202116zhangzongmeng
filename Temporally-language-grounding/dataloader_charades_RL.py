@@ -21,7 +21,7 @@ class Charades_Train_dataset(torch.utils.data.Dataset):
         self.visual_feature_dim = 4096
         self.sent_vec_dim = 4800
 
-        self.sliding_clip_path = os.path.join(self.data_path, "all_fc6_unit16_overlap0.5/")
+        self.sliding_clip_path = os.path.join(self.data_path, "all_fc6_unit16_overlap0.5")
         '''
         all_fc6_unit16_overlap0.5/每个视频的滑动窗口特征(numpy数组，每个滑动窗口作为一个unit提取特征)
         MovieName_StartFrame.0_EndFrame.0.npy"
@@ -77,7 +77,7 @@ class Charades_Train_dataset(torch.utils.data.Dataset):
         original_feats = np.zeros([300, feats_dimen], dtype=np.float32)
         original_feats_1 = np.zeros([int(num_units), feats_dimen], dtype=np.float32)
         for k, (curr_s, curr_e) in enumerate(start_end_list):
-            one_feat = np.load(self.sliding_clip_path + movie_name + "_" + str(curr_s) + ".0_" + str(curr_e) + ".0.npy")
+            one_feat = np.load(os.path.join(self.sliding_clip_path, movie_name + "_" + str(curr_s) + ".0_" + str(curr_e) + ".0.npy"))
             original_feats[k] = one_feat
             original_feats_1[k] = one_feat
 
@@ -151,7 +151,7 @@ class Charades_Test_dataset(torch.utils.data.Dataset):
         self.feats_dimen = 4096
         self.unit_size = 16
         self.semantic_size = 4800
-        self.sliding_clip_path = os.path.join(self.data_path, "all_fc6_unit16_overlap0.5/")
+        self.sliding_clip_path = os.path.join(self.data_path, "all_fc6_unit16_overlap0.5")
         self.index_in_epoch = 0
         self.spacy_vec_dim = 300
         self.sent_vec_dim = 4800
@@ -218,7 +218,7 @@ class Charades_Test_dataset(torch.utils.data.Dataset):
         # original_feats = np.zeros([num_units, feats_dimen], dtype=np.float32)
         original_feats = np.zeros([num_units, feats_dimen], dtype=np.float32)
         for k, (curr_s, curr_e) in enumerate(start_end_list):
-            one_feat = np.load(self.sliding_clip_path + movie_name + "_" + str(curr_s) + ".0_" + str(curr_e) + ".0.npy")
+            one_feat = np.load(os.path.join(self.sliding_clip_path, movie_name + "_" + str(curr_s) + ".0_" + str(curr_e) + ".0.npy"))
             original_feats[k] = one_feat
         # print(np.shape(original_feats))
         global_feature = np.mean(original_feats, axis=0)
