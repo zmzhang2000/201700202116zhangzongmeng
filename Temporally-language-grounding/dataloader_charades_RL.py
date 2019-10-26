@@ -19,7 +19,8 @@ class Charades_Train_dataset(torch.utils.data.Dataset):
         self.context_num = 1
         self.context_size = 128
         self.visual_feature_dim = 4096
-        self.sent_vec_dim = 4800
+        self.sentence_size = 10
+        self.word_embedding_size = 300
 
         self.sliding_clip_path = os.path.join(self.data_path, "all_fc6_unit16_overlap0.5")
         '''
@@ -31,7 +32,7 @@ class Charades_Train_dataset(torch.utils.data.Dataset):
         '''
 
         self.clip_sentence_pairs_iou_all = pickle.load(
-            open(os.path.join(self.data_path, "charades_rl_train_feature_all.pkl"), 'rb'), encoding='iso-8859-1')
+            open(os.path.join(self.data_path, "charades_rl_train_feature_all_glove_embedding.pkl"), 'rb'), encoding='iso-8859-1')
         ''' 
         charades_rl_train_feature_all: [item0, item1...]
         
@@ -45,6 +46,7 @@ class Charades_Train_dataset(torch.utils.data.Dataset):
          'proposal_or_sliding_window': 'AO8RW_1_129',
          'sent_skip_thought_vec': [array([[-0.00339404,  0.00549818, -0.00043744, ...,  0.08359446,
                  0.00238644,  0.01462354]], dtype=float32)],
+         'glove_embeddings': numpy.array(shape:[10,300])(单个embedding长300，句子长10，不够用0向量补齐)
          'sentence': 'a person is putting a book on a shelf.',
          'video': 'AO8RW'}
          
@@ -74,6 +76,7 @@ class Charades_Train_dataset(torch.utils.data.Dataset):
             start_end_list.append((curr_start, curr_start + unit_size))
             curr_start += unit_size
 
+        # 数据集中最长3944帧 < 300x16
         original_feats = np.zeros([300, feats_dimen], dtype=np.float32)
         original_feats_1 = np.zeros([int(num_units), feats_dimen], dtype=np.float32)
         for k, (curr_s, curr_e) in enumerate(start_end_list):
@@ -115,7 +118,7 @@ class Charades_Train_dataset(torch.utils.data.Dataset):
 
         # print(np.shape(global_feature), np.shape(original_feats), np.shape(initial_feature))
 
-        sentence = samples['sent_skip_thought_vec'][0][0]
+        sentence = samples['glove_embeddings']
         # print(np.shape(sentence))
         offset_start = samples['offset_start']
         offset_end = samples['offset_end']
@@ -154,11 +157,12 @@ class Charades_Test_dataset(torch.utils.data.Dataset):
         self.sliding_clip_path = os.path.join(self.data_path, "all_fc6_unit16_overlap0.5")
         self.index_in_epoch = 0
         self.spacy_vec_dim = 300
-        self.sent_vec_dim = 4800
+        self.sentence_size = 10
+        self.word_embedding_size = 300
         self.epochs_completed = 0
 
         self.clip_sentence_pairs = pickle.load(
-            open(os.path.join(self.data_path, "ref_info/charades_sta_test_semantic_sentence_VP_sub_obj.pkl"), 'rb'),
+            open(os.path.join(self.data_path, "ref_info/charades_sta_test_semantic_sentence_VP_sub_obj_glove_embedding.pkl"), 'rb'),
             encoding='iso-8859-1')
         print(str(len(self.clip_sentence_pairs)) + " test videos are readed")  # 1334
         '''
@@ -174,6 +178,9 @@ class Charades_Test_dataset(torch.utils.data.Dataset):
          'sentence': 'person close the door.',
          'subj': [],
          'subj_spacy_vec': []}
+         
+         每个MovieName可能有多个FeatureFileName，每个FeatureFileName可能有多个feature
+         每个movie可能有多个clip，每个clip又可能有多个description
         '''
 
         movie_names_set = set()
@@ -241,6 +248,7 @@ class Charades_Test_dataset(torch.utils.data.Dataset):
         initial_offset_norm = np.zeros(2, dtype=np.float32)
         movie_clip_sentences = []
 
+        # 以已提取视频特征的最大帧编号作为视频结束点
         checkpoint_paths = glob.glob(self.sliding_clip_path + movie_name + "_*")
         checkpoint_file_name_ints = [int(float(x.split('/')[-1].split('.npy')[0].split('_')[-1]))
                                      for x in checkpoint_paths]
@@ -252,9 +260,10 @@ class Charades_Test_dataset(torch.utils.data.Dataset):
         ten_unit = np.array(ten_unit)
         num_units = np.array(num_units)
 
+        # movie_clip_sentences:(FeatureFileName(clip),sent_skip_thought_vec(sentence))
         for dict_2nd in self.clip_sentence_pairs[movie_name]:
             for dict_3rd in self.clip_sentence_pairs[movie_name][dict_2nd]:
-                sentence_vec_ = dict_3rd['sent_skip_thought_vec'][0][0, :self.sent_vec_dim]
+                sentence_vec_ = dict_3rd['glove_embeddings']
                 movie_clip_sentences.append((dict_2nd, sentence_vec_))
 
         initial_offset[0] = initial_offset_start
