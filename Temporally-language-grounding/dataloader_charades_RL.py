@@ -249,7 +249,7 @@ class Charades_Test_dataset(torch.utils.data.Dataset):
         movie_clip_sentences = []
 
         # 以已提取视频特征的最大帧编号作为视频结束点
-        checkpoint_paths = glob.glob(self.sliding_clip_path + movie_name + "_*")
+        checkpoint_paths = glob.glob(os.path.join(self.sliding_clip_path,movie_name + "_*"))
         checkpoint_file_name_ints = [int(float(x.split('/')[-1].split('.npy')[0].split('_')[-1]))
                                      for x in checkpoint_paths]
         end = max(checkpoint_file_name_ints)
