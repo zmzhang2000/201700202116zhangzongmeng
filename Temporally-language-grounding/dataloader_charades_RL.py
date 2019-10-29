@@ -132,18 +132,10 @@ class Charades_Train_dataset(torch.utils.data.Dataset):
 
         # print(np.shape(global_feature), np.shape(original_feats), np.shape(initial_feature))
 
-        tokens_idx = [self.word2idx(token) for token in samples['tokens']]
-
-        # 将tokens转换为one-hot行向量组成的矩阵 sentence_length x vocab_size
-        input_idx = [0] + tokens_idx        # 输入左填充<sos>
-        sentence_input = np.zeros((self.sentence_size, len(self.vocab)))
-        for i, idx in enumerate(input_idx):
-            sentence_input[i][idx] = 1
-
-        target_idx = tokens_idx + [1]       # 目标右填充<eos>
-        sentence_target = np.zeros((self.sentence_size, len(self.vocab)))
-        for i, idx in enumerate(target_idx):
-            sentence_target[i][idx] = 1
+        token_embeddings = np.concatenate((self.embeddings[0][np.newaxis, :], samples['glove_embeddings']), axis=0)
+        target = np.zeros((self.sentence_size+1, len(self.vocab)))
+        for row,col in enumerate([self.word2idx(word) for word in samples['tokens']] + [1]):
+            target[row, col] = 1
 
         offset_start = samples['offset_start']
         offset_end = samples['offset_end']
@@ -163,8 +155,7 @@ class Charades_Train_dataset(torch.utils.data.Dataset):
         initial_offset_norm[0] = initial_offset_start_norm
         initial_offset_norm[1] = initial_offset_end_norm
 
-        # sentence_input/target * self.embeddings得到sentence_size x 300的句子embedding
-        return global_feature, original_feats, initial_feature, sentence_input, sentence_target, self.embeddings, offset_norm, initial_offset, initial_offset_norm, ten_unit, num_units
+        return global_feature, original_feats, initial_feature, token_embeddings, target, offset_norm, initial_offset, initial_offset_norm, ten_unit, num_units
 
     def __len__(self):
         return self.num_samples_iou
@@ -301,17 +292,11 @@ class Charades_Test_dataset(torch.utils.data.Dataset):
         # movie_clip_sentences:(FeatureFileName(clip),sent_skip_thought_vec(sentence))
         for dict_2nd in self.clip_sentence_pairs[movie_name]:
             for dict_3rd in self.clip_sentence_pairs[movie_name][dict_2nd]:
-                tokens_idx = [self.word2idx(token) for token in dict_3rd['tokens']]
-                # 将token转换为one-hot向量
-                input_idx = [0] + tokens_idx  # 输入左填充<sos>
-                sentence_input = np.zeros((self.sentence_size, len(self.vocab)))
-                for i, idx in enumerate(input_idx):
-                    sentence_input[i][idx] = 1
-                target_idx = tokens_idx + [1]  # 目标右填充<eos>
-                sentence_target = np.zeros((self.sentence_size, len(self.vocab)))
-                for i, idx in enumerate(target_idx):
-                    sentence_target[i][idx] = 1
-                movie_clip_sentences.append((dict_2nd, sentence_input, sentence_target))
+                token_embeddings = np.concatenate((self.embeddings[0][np.newaxis, :], dict_3rd['glove_embeddings']), axis=0)
+                target = np.zeros((self.sentence_size + 1, len(self.vocab)))
+                for row, col in enumerate([self.word2idx(word) for word in dict_3rd['tokens']] + [1]):
+                    target[row, col] = 1
+                movie_clip_sentences.append((dict_2nd, token_embeddings, target))
 
         initial_offset[0] = initial_offset_start
         initial_offset[1] = initial_offset_end
@@ -319,12 +304,10 @@ class Charades_Test_dataset(torch.utils.data.Dataset):
         initial_offset_norm[0] = initial_offset_start_norm
         initial_offset_norm[1] = initial_offset_end_norm
 
-        return movie_clip_sentences, self.embeddings, global_feature, original_feats, initial_feature, initial_offset, initial_offset_norm, ten_unit, num_units
+        return movie_clip_sentences, global_feature, original_feats, initial_feature, initial_offset, initial_offset_norm, ten_unit, num_units
 
 
 if __name__ == "__main__":
-    # train = Charades_Train_dataset('E:/Data/charades-features')
-    test = Charades_Test_dataset('E:/Data/charades-features')
-    # a = train.__getitem__(0)
-    b = test.load_movie_slidingclip('001YG')
-    print(b)
+    train = Charades_Train_dataset('E:/Data/charades-features')
+    a = train.__getitem__(49441)
+    print(a)
