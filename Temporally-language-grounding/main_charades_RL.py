@@ -212,12 +212,13 @@ def train(epoch):
     value_loss_epoch = []
     total_rewards_epoch = []
 
-    for batch_idx, (
-            global_feature, original_feats, initial_feature, sentence, offset_norm, initial_offset, initial_offset_norm,
-            ten_unit, num_units) in enumerate(trainloader):
+    for batch_idx, (global_feature, original_feats, initial_feature, token_embeddings, target,
+                    offset_norm, initial_offset, initial_offset_norm, ten_unit, num_units) in enumerate(trainloader):
 
-        global_feature, original_feats, initial_feature, sentence, offset_norm, initial_offset, initial_offset_norm, ten_unit, num_units = global_feature.cuda(), \
-                                                                                                                                           original_feats.cuda(), initial_feature.cuda(), sentence.cuda(), offset_norm.cuda(), initial_offset.cuda(), initial_offset_norm.cuda(), ten_unit.cuda(), num_units.cuda()
+        global_feature, original_feats, initial_feature, token_embeddings, target, \
+        offset_norm, initial_offset, initial_offset_norm, ten_unit, num_units = \
+            global_feature.float().cuda(), original_feats.float().cuda(), initial_feature.float().cuda(), token_embeddings.float().cuda(), target.float().cuda(), \
+            offset_norm.float().cuda(), initial_offset.float().cuda(), initial_offset_norm.float().cuda(), ten_unit.cuda(), num_units.cuda()
 
         batch_size = len(global_feature)
         entropies = torch.zeros(opt.num_steps, batch_size)
@@ -238,8 +239,8 @@ def train(epoch):
                 current_offset = initial_offset
                 current_offset_norm = initial_offset_norm
 
-            hidden_state, logit, value, tIoU, location = net(global_feature, current_feature, sentence,
-                                                             current_offset_norm, hidden_state)
+            hidden_state, logit, value, tIoU, location, reconstruction_prob = net(global_feature, current_feature,
+                                token_embeddings, target, current_offset_norm, hidden_state)
 
             prob = F.softmax(logit, dim=1)
             log_prob = F.log_softmax(logit, dim=1)
@@ -270,7 +271,7 @@ def train(epoch):
                     current_feature_med = torch.mean(current_feature_med, dim=0)
                     current_feature[i] = current_feature_med
 
-            reward = calculate_reward_batch_withstop(Previou_IoU, current_IoU, step + 1)
+            reward = calculate_reward_batch_withstop(Previou_IoU, current_IoU, step + 1) + reconstruction_prob.cpu()
             values[step, :] = value.squeeze(1)
             log_probs[step, :] = log_prob.squeeze(1)
             rewards[step, :] = reward
@@ -432,9 +433,12 @@ def test(epoch):
 
         for k in range(len(movie_clip_sentences)):
 
-            sent_vec = movie_clip_sentences[k][1]
-            sent_vec = np.reshape(sent_vec, [1, sent_vec.shape[0]])  # 1,4800
-            sent_vec = torch.from_numpy(sent_vec).cuda()
+            token_embeddings = movie_clip_sentences[k][1]
+            token_embeddings = np.reshape(token_embeddings, [1, token_embeddings.shape[0]])  # 1,4800
+            token_embeddings = torch.from_numpy(token_embeddings).cuda()
+            target = movie_clip_sentences[k][2]
+            target = np.reshape(target, [1, target.shape[0]])
+            target = torch.from_numpy(target),cuda()
 
             # network forward
             for step in range(opt.num_steps):
@@ -445,8 +449,8 @@ def test(epoch):
                     current_offset_norm = initial_offset_norm
 
                 # hidden_state, logit, value = net(global_feature, current_feature, sent_vec, current_offset_norm, hidden_state)
-                hidden_state, logit, value, tIoU, location = net(global_feature, current_feature, sent_vec,
-                                                                 current_offset_norm, hidden_state)
+                hidden_state, logit, value, tIoU, location, reconstruction_prob = net(global_feature, current_feature,
+                                            token_embeddings, target, current_offset_norm, hidden_state)
 
                 prob = F.softmax(logit, dim=1)
                 action = prob.max(1, keepdim=True)[1].data.cpu().numpy()[0, 0]
