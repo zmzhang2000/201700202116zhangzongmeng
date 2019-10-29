@@ -280,7 +280,7 @@ def train(epoch):
             # 每一列为mini-batch中的一个样本，每一行为一个step
 
         # Reinforcement Learning
-        total_rewards_epoch.append(rewards.sum())
+        total_rewards_epoch.append(rewards.sum().item())
 
         policy_loss = 0     # LA(θΠ)
         value_loss = 0      # LC(θv)
