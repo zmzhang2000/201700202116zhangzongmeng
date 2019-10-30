@@ -419,13 +419,13 @@ def test(epoch):
         movie_clip_sentences, global_feature, original_feats, initial_feature, initial_offset, initial_offset_norm, ten_unit, num_units \
             = test_dataset.load_movie_slidingclip(movie_name)
 
-        global_feature = torch.from_numpy(global_feature).cuda().unsqueeze(0)
-        original_feats = torch.from_numpy(original_feats).cuda().unsqueeze(0)
-        initial_feature = torch.from_numpy(initial_feature).cuda().unsqueeze(0)
-        initial_offset = torch.from_numpy(initial_offset).cuda().unsqueeze(0)
-        initial_offset_norm = torch.from_numpy(initial_offset_norm).cuda().unsqueeze(0)
-        ten_unit = torch.from_numpy(ten_unit).cuda().unsqueeze(0)
-        num_units = torch.from_numpy(num_units).cuda().unsqueeze(0)
+        global_feature = torch.from_numpy(global_feature).float().cuda().unsqueeze(0)
+        original_feats = torch.from_numpy(original_feats).float().cuda().unsqueeze(0)
+        initial_feature = torch.from_numpy(initial_feature).float().cuda().unsqueeze(0)
+        initial_offset = torch.from_numpy(initial_offset).float().cuda().unsqueeze(0)
+        initial_offset_norm = torch.from_numpy(initial_offset_norm).float().cuda().unsqueeze(0)
+        ten_unit = torch.from_numpy(ten_unit).float().cuda().unsqueeze(0)
+        num_units = torch.from_numpy(num_units).float().cuda().unsqueeze(0)
 
         print("sentences: " + str(len(movie_clip_sentences)))
 
@@ -434,11 +434,11 @@ def test(epoch):
         for k in range(len(movie_clip_sentences)):
 
             token_embeddings = movie_clip_sentences[k][1]
-            token_embeddings = np.reshape(token_embeddings, [1, token_embeddings.shape[0]])  # 1,4800
-            token_embeddings = torch.from_numpy(token_embeddings).cuda()
+            token_embeddings = np.reshape(token_embeddings, [1, token_embeddings.shape[0], token_embeddings.shape[1]])  # 1,4800
+            token_embeddings = torch.from_numpy(token_embeddings).float().cuda()
             target = movie_clip_sentences[k][2]
-            target = np.reshape(target, [1, target.shape[0]])
-            target = torch.from_numpy(target),cuda()
+            target = np.reshape(target, [1, target.shape[0], target.shape[1]])
+            target = torch.from_numpy(target).float().cuda()
 
             # network forward
             for step in range(opt.num_steps):

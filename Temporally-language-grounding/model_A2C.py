@@ -73,7 +73,7 @@ class A2C(nn.Module):
         output = F.softmax(output, dim=2)
         reconstruction_prob = (output * target).sum(dim=2).mean()
 
-        senetence_feature = self.hidden[0].squeeze()
+        senetence_feature = self.hidden[0].squeeze(0)
         senetence_feature_norm = F.normalize(senetence_feature, p=2, dim=1)
         senetence_feature_norm = F.relu(senetence_feature_norm)
 
