@@ -218,7 +218,7 @@ def train(epoch):
         global_feature, original_feats, initial_feature, token_embeddings, target, \
         offset_norm, initial_offset, initial_offset_norm, ten_unit, num_units = \
             global_feature.float().cuda(), original_feats.float().cuda(), initial_feature.float().cuda(), token_embeddings.float().cuda(), target.float().cuda(), \
-            offset_norm.float().cuda(), initial_offset.float().cuda(), initial_offset_norm.float().cuda(), ten_unit.cuda(), num_units.cuda()
+            offset_norm.float().cuda(), initial_offset.cuda(), initial_offset_norm.float().cuda(), ten_unit.cuda(), num_units.cuda()
 
         batch_size = len(global_feature)
         entropies = torch.zeros(opt.num_steps, batch_size)
@@ -422,10 +422,10 @@ def test(epoch):
         global_feature = torch.from_numpy(global_feature).float().cuda().unsqueeze(0)
         original_feats = torch.from_numpy(original_feats).float().cuda().unsqueeze(0)
         initial_feature = torch.from_numpy(initial_feature).float().cuda().unsqueeze(0)
-        initial_offset = torch.from_numpy(initial_offset).float().cuda().unsqueeze(0)
+        initial_offset = torch.from_numpy(initial_offset).cuda().unsqueeze(0)
         initial_offset_norm = torch.from_numpy(initial_offset_norm).float().cuda().unsqueeze(0)
-        ten_unit = torch.from_numpy(ten_unit).float().cuda().unsqueeze(0)
-        num_units = torch.from_numpy(num_units).float().cuda().unsqueeze(0)
+        ten_unit = torch.from_numpy(ten_unit).cuda().unsqueeze(0)
+        num_units = torch.from_numpy(num_units).cuda().unsqueeze(0)
 
         print("sentences: " + str(len(movie_clip_sentences)))
 
