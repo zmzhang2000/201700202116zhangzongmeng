@@ -66,7 +66,7 @@ class A2C(nn.Module):
         local_feature_norm = F.relu(local_feature_norm)
 
         output, (sentence_embedding, _) = self.lstm1(token_embeddings)
-        sentence_embedding = sentence_embedding.squeeze()
+        sentence_embedding = sentence_embedding.view(-1,sentence_embedding.shape[-1])
         lstm2_input = local_feature.unsqueeze(1).repeat(1, output.shape[1], 1)
         lstm2_input = torch.cat((output, lstm2_input), dim=2)
         output, self.hidden = self.lstm2(lstm2_input)
