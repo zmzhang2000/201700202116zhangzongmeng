@@ -274,6 +274,7 @@ def train(epoch):
     policy_loss_epoch = []
     value_loss_epoch = []
     total_rewards_epoch = []
+    reconstr_rewards_epoch = []
 
     for batch_idx, (global_feature, original_feats, initial_feature, token_embeddings, target,
                     offset_norm, initial_offset, initial_offset_norm, ten_unit, num_units) in enumerate(trainloader):
@@ -292,6 +293,7 @@ def train(epoch):
         Predict_IoUs = torch.zeros(opt.num_steps, batch_size)
         locations = torch.zeros(opt.num_steps, batch_size, 2)
         mask = torch.zeros(opt.num_steps, batch_size)
+        reconstr_rewards = torch.zeros(opt.num_steps, batch_size)
 
         # network forward
         for step in range(opt.num_steps):
@@ -337,6 +339,7 @@ def train(epoch):
                     current_feature[i] = current_feature_med
 
             reward = calculate_reward_batch_withstop(Previou_IoU, current_IoU, step + 1) + reconstruction_prob.cpu()
+            reconstr_rewards[step, :] = reconstruction_prob.cpu()
             values[step, :] = value.squeeze(1)
             log_probs[step, :] = log_prob.squeeze(1)
             rewards[step, :] = reward
@@ -346,6 +349,7 @@ def train(epoch):
 
         # Reinforcement Learning
         total_rewards_epoch.append(rewards.sum().item())
+        reconstr_rewards_epoch.append(reconstr_rewards.sum().item())
 
         policy_loss = 0     # LA(θΠ)
         value_loss = 0      # LC(θv)
@@ -428,6 +432,10 @@ def train(epoch):
     ave_total_rewards_all.append(ave_total_rewards_epoch)
     print("Average Total reward for Train Epoch %d: %f" % (epoch, ave_total_rewards_epoch))
 
+    ave_reconstr_rewards_epoch = sum(reconstr_rewards_epoch) / len(reconstr_rewards_epoch)
+    ave_reconstr_rewards_all.append(ave_reconstr_rewards_epoch)
+    print("Average reconstr reward for Train Epoch %d: %f" % (epoch, ave_reconstr_rewards_epoch))
+
     with open(path + "/iteration_ave_reward.pkl", "wb") as file:
         pickle.dump(ave_total_rewards_all, file)
     # plot the val loss vs epoch and save to disk:
@@ -463,6 +471,19 @@ def train(epoch):
     plt.title("Average Value Loss iteration")
     plt.xticks(fontsize=8)
     plt.savefig(path + "/iteration_ave_value_loss.png")
+    plt.close(1)
+
+    with open(path + "/iteration_ave_reconstr_reward.pkl", "wb") as file:
+        pickle.dump(ave_reconstr_rewards_all, file)
+    # plot the val loss vs epoch and save to disk:
+    x = np.arange(1, len(ave_reconstr_rewards_all) + 1)
+    plt.figure(1)
+    plt.plot(x, ave_reconstr_rewards_all, "r-")
+    plt.ylabel("Reconstruction Rewards")
+    plt.xlabel("Iteration")
+    plt.title("Average Reconstruction Reward iteration")
+    plt.xticks(fontsize=8)
+    plt.savefig(path + "/iteration_ave_reconstr_reward.png")
     plt.close(1)
 
 
@@ -626,6 +647,7 @@ if __name__ == '__main__':
     ave_policy_loss_all = []
     ave_value_loss_all = []
     ave_total_rewards_all = []
+    ave_reconstr_rewards_all = []
 
     R1_IOU7_all = []
     R1_IOU5_all = []
