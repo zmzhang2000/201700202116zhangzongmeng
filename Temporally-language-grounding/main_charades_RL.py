@@ -274,15 +274,14 @@ def train(epoch):
     policy_loss_epoch = []
     value_loss_epoch = []
     total_rewards_epoch = []
-    reconstr_rewards_epoch = []
 
     for batch_idx, (global_feature, original_feats, initial_feature, token_embeddings, target,
-                    offset_norm, initial_offset, initial_offset_norm, ten_unit, num_units) in enumerate(trainloader):
+                    offset_norm, initial_offset, initial_offset_norm, ten_unit, num_units, sentence_feature) in enumerate(trainloader):
 
         global_feature, original_feats, initial_feature, token_embeddings, target, \
-        offset_norm, initial_offset, initial_offset_norm, ten_unit, num_units = \
+        offset_norm, initial_offset, initial_offset_norm, ten_unit, num_units, sentence_feature = \
             global_feature.float().cuda(), original_feats.float().cuda(), initial_feature.float().cuda(), token_embeddings.float().cuda(), target.float().cuda(), \
-            offset_norm.float().cuda(), initial_offset.cuda(), initial_offset_norm.float().cuda(), ten_unit.cuda(), num_units.cuda()
+            offset_norm.float().cuda(), initial_offset.cuda(), initial_offset_norm.float().cuda(), ten_unit.cuda(), num_units.cuda(), sentence_feature.float().cuda()
 
         batch_size = len(global_feature)
         entropies = torch.zeros(opt.num_steps, batch_size)
@@ -293,7 +292,6 @@ def train(epoch):
         Predict_IoUs = torch.zeros(opt.num_steps, batch_size)
         locations = torch.zeros(opt.num_steps, batch_size, 2)
         mask = torch.zeros(opt.num_steps, batch_size)
-        reconstr_rewards = torch.zeros(opt.num_steps, batch_size)
 
         # network forward
         for step in range(opt.num_steps):
@@ -304,8 +302,8 @@ def train(epoch):
                 current_offset = initial_offset
                 current_offset_norm = initial_offset_norm
 
-            hidden_state, logit, value, tIoU, location, reconstruction_prob = net(global_feature, current_feature,
-                                token_embeddings, target, current_offset_norm, hidden_state)
+            hidden_state, logit, value, tIoU, location = net(global_feature, current_feature,
+                                token_embeddings, sentence_feature, current_offset_norm, hidden_state)
 
             prob = F.softmax(logit, dim=1)
             log_prob = F.log_softmax(logit, dim=1)
@@ -338,8 +336,7 @@ def train(epoch):
                     current_feature_med = torch.mean(current_feature_med, dim=0)
                     current_feature[i] = current_feature_med
 
-            reward = calculate_reward_batch_withstop(Previou_IoU, current_IoU, step + 1) + 0.1 * reconstruction_prob.cpu()
-            reconstr_rewards[step, :] = 0.1 * reconstruction_prob.cpu()
+            reward = calculate_reward_batch_withstop(Previou_IoU, current_IoU, step + 1)
             values[step, :] = value.squeeze(1)
             log_probs[step, :] = log_prob.squeeze(1)
             rewards[step, :] = reward
@@ -349,7 +346,6 @@ def train(epoch):
 
         # Reinforcement Learning
         total_rewards_epoch.append(rewards.sum().item())
-        reconstr_rewards_epoch.append(reconstr_rewards.sum().item())
 
         policy_loss = 0     # LA(θΠ)
         value_loss = 0      # LC(θv)
@@ -432,10 +428,6 @@ def train(epoch):
     ave_total_rewards_all.append(ave_total_rewards_epoch)
     print("Average Total reward for Train Epoch %d: %f" % (epoch, ave_total_rewards_epoch))
 
-    ave_reconstr_rewards_epoch = sum(reconstr_rewards_epoch) / len(reconstr_rewards_epoch)
-    ave_reconstr_rewards_all.append(ave_reconstr_rewards_epoch)
-    print("Average reconstr reward for Train Epoch %d: %f" % (epoch, ave_reconstr_rewards_epoch))
-
     with open(path + "/iteration_ave_reward.pkl", "wb") as file:
         pickle.dump(ave_total_rewards_all, file)
     # plot the val loss vs epoch and save to disk:
@@ -471,19 +463,6 @@ def train(epoch):
     plt.title("Average Value Loss iteration")
     plt.xticks(fontsize=8)
     plt.savefig(path + "/iteration_ave_value_loss.png")
-    plt.close(1)
-
-    with open(path + "/iteration_ave_reconstr_reward.pkl", "wb") as file:
-        pickle.dump(ave_reconstr_rewards_all, file)
-    # plot the val loss vs epoch and save to disk:
-    x = np.arange(1, len(ave_reconstr_rewards_all) + 1)
-    plt.figure(1)
-    plt.plot(x, ave_reconstr_rewards_all, "r-")
-    plt.ylabel("Reconstruction Rewards")
-    plt.xlabel("Iteration")
-    plt.title("Average Reconstruction Reward iteration")
-    plt.xticks(fontsize=8)
-    plt.savefig(path + "/iteration_ave_reconstr_reward.png")
     plt.close(1)
 
 
@@ -532,6 +511,9 @@ def test(epoch):
             target = movie_clip_sentences[k][2]
             target = np.reshape(target, [1, target.shape[0], target.shape[1]])
             target = torch.from_numpy(target).float().cuda()
+            sentence_feature = movie_clip_sentences[k][3]
+            sentence_feature = np.reshape(sentence_feature, [1, sentence_feature.shape[0]])
+            sentence_feature = torch.from_numpy(sentence_feature).float().cuda()
 
             # network forward
             for step in range(opt.num_steps):
@@ -542,8 +524,8 @@ def test(epoch):
                     current_offset_norm = initial_offset_norm
 
                 # hidden_state, logit, value = net(global_feature, current_feature, sent_vec, current_offset_norm, hidden_state)
-                hidden_state, logit, value, tIoU, location, reconstruction_prob = net(global_feature, current_feature,
-                                            token_embeddings, target, current_offset_norm, hidden_state)
+                hidden_state, logit, value, tIoU, location = net(global_feature, current_feature,
+                                            token_embeddings, sentence_feature, current_offset_norm, hidden_state)
 
                 prob = F.softmax(logit, dim=1)
                 action = prob.max(1, keepdim=True)[1].data.cpu().numpy()[0, 0]
@@ -647,7 +629,6 @@ if __name__ == '__main__':
     ave_policy_loss_all = []
     ave_value_loss_all = []
     ave_total_rewards_all = []
-    ave_reconstr_rewards_all = []
 
     R1_IOU7_all = []
     R1_IOU5_all = []

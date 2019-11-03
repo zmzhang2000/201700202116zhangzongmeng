@@ -29,16 +29,15 @@ class A2C(nn.Module):
         self.word_embedding_size = 300
         self.visual_feature_dim = 4096
         self.vocab_size = 1089
+        self.sentence_embedding_size = 4800
 
         self.lstm1 = nn.LSTM(input_size=self.word_embedding_size,
                              hidden_size=512, batch_first=True)
-        self.lstm2 = nn.LSTM(input_size=512+self.visual_feature_dim,
-                             hidden_size=512, batch_first=True)
-        self.hidden2idx = nn.Linear(512, self.vocab_size)
         self.gobal_fc = nn.Linear(self.visual_feature_dim, 512)
         self.local_fc = nn.Linear(self.visual_feature_dim, 512)
+        self.sentence_fc = nn.Linear(self.sentence_embedding_size, 1024)
         self.location_fc = nn.Linear(2, 128)
-        self.state_fc = nn.Linear(512+512+512+512+128, 1024)
+        self.state_fc = nn.Linear(512+512+512+1024+128, 1024)
 
         self.gru = nn.GRUCell(1024, 1024)
         self.critic_linear = nn.Linear(1024, 1)
@@ -56,7 +55,7 @@ class A2C(nn.Module):
             self.critic_linear.weight.data, 1.0)
         self.critic_linear.bias.data.fill_(0)
 
-    def forward(self, global_feature, local_feature, token_embeddings, target, location_feature, hidden_state):
+    def forward(self, global_feature, local_feature, token_embeddings, sentence_feature, location_feature, hidden_state):
         global_feature = self.gobal_fc(global_feature)
         global_feature_norm = F.normalize(global_feature, p=2, dim=1)
         global_feature_norm = F.relu(global_feature_norm)
@@ -67,14 +66,8 @@ class A2C(nn.Module):
 
         output, (sentence_embedding, _) = self.lstm1(token_embeddings)
         sentence_embedding = sentence_embedding.view(-1,sentence_embedding.shape[-1])
-        lstm2_input = local_feature.unsqueeze(1).repeat(1, output.shape[1], 1)
-        lstm2_input = torch.cat((output, lstm2_input), dim=2)
-        output, self.hidden = self.lstm2(lstm2_input)
-        output = self.hidden2idx(output)
-        output = F.softmax(output, dim=2)
-        reconstruction_prob = (output * target).sum(dim=2).mean()
 
-        senetence_feature = self.hidden[0].squeeze(0)
+        senetence_feature = self.sentence_fc(sentence_feature)
         senetence_feature_norm = F.normalize(senetence_feature, p=2, dim=1)
         senetence_feature_norm = F.relu(senetence_feature_norm)
 
@@ -93,7 +86,7 @@ class A2C(nn.Module):
         tIoU = self.tiou_resfc(state_feature)
         location = self.location_resfc(state_feature)
 
-        return hidden_state, actions, value, tIoU, location, reconstruction_prob
+        return hidden_state, actions, value, tIoU, location
 
 
 

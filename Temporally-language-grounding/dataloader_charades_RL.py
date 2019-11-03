@@ -133,6 +133,7 @@ class Charades_Train_dataset(torch.utils.data.Dataset):
 
         # print(np.shape(global_feature), np.shape(original_feats), np.shape(initial_feature))
 
+        sentence_feature = samples['sent_skip_thought_vec'][0][0]
         token_embeddings = np.concatenate((self.embeddings[0][np.newaxis, :], samples['glove_embeddings']), axis=0)
         target = np.zeros((self.sentence_size+1, len(self.vocab)))
         for row,col in enumerate([self.word2idx(word) for word in samples['tokens']] + [1]):
@@ -156,7 +157,7 @@ class Charades_Train_dataset(torch.utils.data.Dataset):
         initial_offset_norm[0] = initial_offset_start_norm
         initial_offset_norm[1] = initial_offset_end_norm
 
-        return global_feature, original_feats, initial_feature, token_embeddings, target, offset_norm, initial_offset, initial_offset_norm, ten_unit, num_units
+        return global_feature, original_feats, initial_feature, token_embeddings, target, offset_norm, initial_offset, initial_offset_norm, ten_unit, num_units, sentence_feature
 
     def __len__(self):
         return self.num_samples_iou
@@ -179,6 +180,7 @@ class Charades_Test_dataset(torch.utils.data.Dataset):
         self.sentence_size = 10
         self.word_embedding_size = 300
         self.epochs_completed = 0
+        self.sent_vec_dim = 4800
 
         self.clip_sentence_pairs = pickle.load(
             open(os.path.join(self.data_path, "ref_info/charades_sta_test_semantic_sentence_VP_sub_obj_glove_embedding.pkl"), 'rb'),
@@ -298,7 +300,8 @@ class Charades_Test_dataset(torch.utils.data.Dataset):
                 target = np.zeros((self.sentence_size + 1, len(self.vocab)))
                 for row, col in enumerate([self.word2idx(word) for word in dict_3rd['tokens']] + [1]):
                     target[row, col] = 1
-                movie_clip_sentences.append((dict_2nd, token_embeddings, target))
+                sentence_feature = dict_3rd['sent_skip_thought_vec'][0][0, :self.sent_vec_dim]
+                movie_clip_sentences.append((dict_2nd, token_embeddings, target, sentence_feature))
 
         initial_offset[0] = initial_offset_start
         initial_offset[1] = initial_offset_end
