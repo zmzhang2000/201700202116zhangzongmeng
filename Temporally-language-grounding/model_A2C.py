@@ -38,7 +38,7 @@ class A2C(nn.Module):
         self.gobal_fc = nn.Linear(self.visual_feature_dim, 512)
         self.local_fc = nn.Linear(self.visual_feature_dim, 512)
         self.location_fc = nn.Linear(2, 128)
-        self.state_fc = nn.Linear(512+512+512+128, 1024)
+        self.state_fc = nn.Linear(512+512+512+512+128, 1024)
 
         self.gru = nn.GRUCell(1024, 1024)
         self.critic_linear = nn.Linear(1024, 1)
@@ -65,7 +65,8 @@ class A2C(nn.Module):
         local_feature_norm = F.normalize(local_feature_norm, p=2, dim=1)
         local_feature_norm = F.relu(local_feature_norm)
 
-        output, self.hidden = self.lstm1(token_embeddings)
+        output, (sentence_embedding, _) = self.lstm1(token_embeddings)
+        sentence_embedding = sentence_embedding.squeeze()
         lstm2_input = local_feature.unsqueeze(1).repeat(1, output.shape[1], 1)
         lstm2_input = torch.cat((output, lstm2_input), dim=2)
         output, self.hidden = self.lstm2(lstm2_input)
@@ -81,7 +82,7 @@ class A2C(nn.Module):
         location_feature_norm = F.normalize(location_feature, p=2, dim=1)
         location_feature_norm = F.relu(location_feature_norm)
 
-        state_feature = torch.cat([global_feature_norm, local_feature_norm, senetence_feature_norm, location_feature_norm], 1)
+        state_feature = torch.cat([global_feature_norm, local_feature_norm, sentence_embedding, senetence_feature_norm, location_feature_norm], 1)
         state_feature = self.state_fc(state_feature)
         state_feature = F.relu(state_feature)
 
