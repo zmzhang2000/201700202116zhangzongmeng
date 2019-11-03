@@ -165,6 +165,7 @@ class Charades_Test_dataset(torch.utils.data.Dataset):
     def __init__(self, data_path):
         self.data_path = data_path
         # il_path: image_label_file path
+        self.load_clip_dict = {}
         self.context_num = 1
         self.context_size = 128
         self.visual_feature_dim = 4096
@@ -306,8 +307,18 @@ class Charades_Test_dataset(torch.utils.data.Dataset):
 
         return movie_clip_sentences, global_feature, original_feats, initial_feature, initial_offset, initial_offset_norm, ten_unit, num_units
 
-
-if __name__ == "__main__":
-    train = Charades_Train_dataset('E:/Data/charades-features')
-    a = train.__getitem__(49441)
-    print(a)
+    def multi_process_load_clip(self, chunk:int):
+        try:
+            for movie_name in self.movie_names:
+                yield self.load_clip_dict[movie_name]
+        except Exception as e:
+            from concurrent.futures import ProcessPoolExecutor, ThreadPoolExecutor
+            with ProcessPoolExecutor() as pool:
+                for i in range(0, len(self.movie_names), chunk):
+                    for i, movie_name in zip([
+                        pool.submit(self.load_movie_slidingclip, movie_name)
+                        for movie_name in self.movie_names[i:i+chunk]
+                    ], self.movie_names[i:i+chunk]):
+                        data = i.result()
+                        self.load_clip_dict[movie_name] = data
+                        yield data

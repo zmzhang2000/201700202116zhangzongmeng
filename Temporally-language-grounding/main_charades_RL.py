@@ -44,7 +44,8 @@ print("num_train_batches:", num_train_batches)
 trainloader = torch.utils.data.DataLoader(dataset=train_dataset,
                                           batch_size=opt.batch_size,
                                           shuffle=True,
-                                          num_workers=4)
+                                          num_workers=4,
+                                          pin_memory=True)
 
 # Model
 if opt.model == 'A2C':
@@ -133,76 +134,138 @@ def determine_range_test(action, current_offset, ten_unit, num_units):
 # 根据当前边界选择下一边界
 def determine_range(action, current_offset, ten_unit, num_units):
     batch_size = len(action)
+    num_units = num_units.float()
     current_offset_start_batch = np.zeros(batch_size, dtype=np.int8)
     current_offset_end_batch = np.zeros(batch_size, dtype=np.int8)
-    abnormal_done_batch = torch.ones(batch_size)
+    abnormal_done_batch = torch.ones(batch_size).cuda()
     update_offset = torch.zeros(batch_size, 2)
     update_offset_norm = torch.zeros(batch_size, 2)
 
-    for i in range(batch_size):
-        abnormal_done = False
+    action_embedding = torch.tensor([
+        [1, 1],
+        [-1, -1],
+        [1, 0],
+        [-1, 0],
+        [0, 1],
+        [0, -1],
+        [0, 0],
+        [0, 0],
+        [0, 0]
+    ]).float().cuda()
+    ten_unit = ten_unit.float().cuda()
+    offsett_action = F.embedding(action, action_embedding).float() * ten_unit.unsqueeze(-1)
+    current_offset_batch = current_offset.long().float()
+    current_offset_batch = current_offset_batch + offsett_action
 
-        current_offset_start = int(current_offset[i][0])
-        current_offset_end = int(current_offset[i][1])
+    pre_current_offset_start_batch = current_offset_batch[:, 0]
+    # print(pre_current_offset_start_batch < 0)
+    pre_current_offset_start_batch = torch.where(pre_current_offset_start_batch < 0,
+                                                 torch.zeros_like(pre_current_offset_start_batch),
+                                                 pre_current_offset_start_batch)
 
-        ten_unit_index = int(ten_unit[i])
-        num_units_index = num_units[i]
-        action_index = action[i]
+    pre_current_offset_end_batch = current_offset_batch[:, 1]
+    pre_current_offset_end_batch = torch.where(pre_current_offset_end_batch > num_units, num_units,
+                                               pre_current_offset_end_batch)
+    pre_update_offset = torch.cat((
+        pre_current_offset_start_batch.unsqueeze(-1),
+        pre_current_offset_end_batch.unsqueeze(-1)
+    ), 1)
+    pre_update_offset_norm = torch.cat((
+        (pre_current_offset_start_batch / (num_units - 1).float()).unsqueeze(-1),
+        (pre_current_offset_end_batch / (num_units - 1).float()).unsqueeze(-1)
+    ), 1)
+    initial_current_start = current_offset[:, 0]
+    initial_current_end = current_offset[:, 1]
+    # print(initial_current_start, initial_current_start.type())
+    pre_abnormal_done_batch = torch.where(initial_current_end < 0,
+                                          torch.ones_like(abnormal_done_batch),
+                                          torch.zeros_like(abnormal_done_batch)) + \
+                              torch.where(initial_current_start.float() > num_units,
+                                          torch.ones_like(abnormal_done_batch),
+                                          torch.zeros_like(abnormal_done_batch)) + \
+                              torch.where(initial_current_end <= initial_current_start,
+                                          torch.ones_like(abnormal_done_batch),
+                                          torch.zeros_like(abnormal_done_batch)) + \
+                              torch.where(action == 6,
+                                          torch.ones_like(abnormal_done_batch),
+                                          torch.zeros_like(abnormal_done_batch)) + \
+                              torch.where(pre_current_offset_start_batch > num_units,
+                                          torch.ones_like(abnormal_done_batch),
+                                          torch.zeros_like(abnormal_done_batch)) + \
+                              torch.where(pre_current_offset_end_batch < 0,
+                                          torch.ones_like(abnormal_done_batch),
+                                          torch.zeros_like(abnormal_done_batch)) + \
+                              torch.where(pre_current_offset_end_batch <= pre_current_offset_start_batch,
+                                          torch.ones_like(abnormal_done_batch),
+                                          torch.zeros_like(abnormal_done_batch))
+    pre_abnormal_done_batch = pre_abnormal_done_batch.le(0)
 
-        if current_offset_end < 0 or current_offset_start > num_units_index or current_offset_end <= current_offset_start or action_index == 6:
-            abnormal_done = True
-        else:
-
-            if action_index == 0:
-                current_offset_start = current_offset_start + ten_unit_index
-                current_offset_end = current_offset_end + ten_unit_index
-            elif action_index == 1:
-                current_offset_start = current_offset_start - ten_unit_index
-                current_offset_end = current_offset_end - ten_unit_index
-            elif action_index == 2:
-                current_offset_start = current_offset_start + ten_unit_index
-            elif action_index == 3:
-                current_offset_start = current_offset_start - ten_unit_index
-            elif action_index == 4:
-                current_offset_end = current_offset_end + ten_unit_index
-            elif action_index == 5:
-                current_offset_end = current_offset_end - ten_unit_index
-            else:
-                abnormal_done = True  # stop
-
-            if current_offset_start < 0:
-                current_offset_start = 0
-                if current_offset_end < 0:
-                    abnormal_done = True
-
-            if current_offset_end > num_units_index:
-                current_offset_end = num_units_index
-                if current_offset_start > num_units_index:
-                    abnormal_done = True
-
-            if current_offset_end <= current_offset_start:
-                abnormal_done = True
-
-        current_offset_start_batch[i] = current_offset_start
-        current_offset_end_batch[i] = current_offset_end
-
-        current_offset_start_norm = current_offset_start / float(num_units_index - 1)
-        current_offset_end_norm = current_offset_end / float(num_units_index - 1)
-
-        update_offset_norm[i][0] = current_offset_start_norm
-        update_offset_norm[i][1] = current_offset_end_norm
-
-        update_offset[i][0] = current_offset_start
-        update_offset[i][1] = current_offset_end
-
-        update_offset = update_offset.cuda()
-        update_offset_norm = update_offset_norm.cuda()
-
-        if abnormal_done == True:
-            abnormal_done_batch[i] = 0
-
-    return current_offset_start_batch, current_offset_end_batch, update_offset, update_offset_norm, abnormal_done_batch
-
+    # for i in range(batch_size):
+    #     abnormal_done = False
+    #
+    #     current_offset_start = int(current_offset[i][0])
+    #     current_offset_end = int(current_offset[i][1])
+    #     ten_unit_index = int(ten_unit[i])
+    #
+    #     num_units_index = num_units[i]
+    #     action_index = action[i]
+    #
+    #     if current_offset_end < 0 or current_offset_start > num_units_index \
+    #             or current_offset_end <= current_offset_start or action_index == 6:
+    #         abnormal_done = True
+    #     else:
+    #
+    #         if action_index == 0:
+    #             current_offset_start = current_offset_start + ten_unit_index
+    #             current_offset_end = current_offset_end + ten_unit_index
+    #         elif action_index == 1:
+    #             current_offset_start = current_offset_start - ten_unit_index
+    #             current_offset_end = current_offset_end - ten_unit_index
+    #         elif action_index == 2:
+    #             current_offset_start = current_offset_start + ten_unit_index
+    #         elif action_index == 3:
+    #             current_offset_start = current_offset_start - ten_unit_index
+    #         elif action_index == 4:
+    #             current_offset_end = current_offset_end + ten_unit_index
+    #         elif action_index == 5:
+    #             current_offset_end = current_offset_end - ten_unit_index
+    #         else:
+    #             abnormal_done = True  # stop
+    #
+    #         if current_offset_start < 0:
+    #             current_offset_start = 0
+    #             if current_offset_end < 0:
+    #                 abnormal_done = True
+    #
+    #         if current_offset_end > num_units_index:
+    #             current_offset_end = num_units_index
+    #             if current_offset_start > num_units_index:
+    #                 abnormal_done = True
+    #
+    #         if current_offset_end <= current_offset_start:
+    #             abnormal_done = True
+    #
+    #     current_offset_start_batch[i] = current_offset_start
+    #     current_offset_end_batch[i] = current_offset_end
+    #
+    #     current_offset_start_norm = current_offset_start / float(num_units_index - 1)
+    #     current_offset_end_norm = current_offset_end / float(num_units_index - 1)
+    #
+    #     update_offset_norm[i][0] = current_offset_start_norm
+    #     update_offset_norm[i][1] = current_offset_end_norm
+    #
+    #     update_offset[i][0] = current_offset_start
+    #     update_offset[i][1] = current_offset_end
+    #
+    #     update_offset = update_offset.cuda()
+    #     update_offset_norm = update_offset_norm.cuda()
+    #
+    #     if abnormal_done == True:
+    #         abnormal_done_batch[i] = 0
+    # print( abnormal_done_batch - pre_abnormal_done_batch)
+    # exit()
+    # return current_offset_start_batch, current_offset_end_batch, update_offset, update_offset_norm, abnormal_done_batch
+    return pre_current_offset_start_batch.int(), pre_current_offset_end_batch.int(), pre_update_offset.int(), pre_update_offset_norm, pre_abnormal_done_batch
 
 # Training
 def train(epoch):
@@ -249,10 +312,12 @@ def train(epoch):
 
             action = prob.multinomial(num_samples=1).data
             log_prob = log_prob.gather(1, action)
-            action = action.cpu().numpy()[:, 0]
-            current_offset_start, current_offset_end, current_offset, current_offset_norm, abnormal_done = determine_range(
-                action, current_offset, ten_unit, num_units)
-
+            # action = action.cpu().numpy()[:, 0]
+            action = action.squeeze()
+            current_offset_start, current_offset_end, current_offset, \
+            current_offset_norm, abnormal_done = determine_range(action, \
+                                                                 current_offset, ten_unit, num_units)
+            # print(current_offset_start)
             if step == 0:
                 Previou_IoU = calculate_RL_IoU_batch(initial_offset_norm, offset_norm)
             else:
@@ -339,13 +404,17 @@ def train(epoch):
         (policy_loss + value_loss + iou_loss + loc_loss).backward(retain_graph=True)
         optimizer.step()
 
-        print("Train Epoch: %d | Index: %d | policy loss: %f" % (epoch, batch_idx + 1, policy_loss.item()))
-        print("Train Epoch: %d | Index: %d | value_loss: %f" % (epoch, batch_idx + 1, value_loss.item()))
+        print("Train Epoch: %d | Index: %d / %d | policy loss: %f" % (
+            epoch, batch_idx + 1, len(train_dataset)/opt.batch_size, policy_loss.item()))
+        print("Train Epoch: %d | Index: %d / %d | value_loss: %f" % (
+            epoch, batch_idx + 1, len(train_dataset)/opt.batch_size, value_loss.item()))
 
         # test(epoch)
-        print("Train Epoch: %d | Index: %d | iou_loss: %f" % (epoch, batch_idx + 1, iou_loss.item()))
+        print("Train Epoch: %d | Index: %d / %d | iou_loss: %f" % (
+            epoch, batch_idx + 1, len(train_dataset)/opt.batch_size, iou_loss.item()))
         if loc_loss > 0:
-            print("Train Epoch: %d | Index: %d | location_loss: %f" % (epoch, batch_idx + 1, loc_loss.item()))
+            print("Train Epoch: %d | Index: %d / %d | location_loss: %f" % (
+                epoch, batch_idx + 1, len(train_dataset)/opt.batch_size, loc_loss.item()))
 
     ave_policy_loss = sum(policy_loss_epoch) / len(policy_loss_epoch)
     ave_policy_loss_all.append(ave_policy_loss)
@@ -410,14 +479,17 @@ def test(epoch):
     all_retrievd = 0.0
     all_number = len(test_dataset.movie_names)
     idx = 0
-    for movie_name in test_dataset.movie_names:
+
+    for movie_name, movie_slidingclip in zip(test_dataset.movie_names,
+                          test_dataset.multi_process_load_clip(20)):
         idx += 1
         print("%d/%d" % (idx, all_number))
         # movie_length = test_dataset.movie_length_info[movie_name.split(".")[0]]
         print("Test movie: " + movie_name + "....loading movie data")
 
-        movie_clip_sentences, global_feature, original_feats, initial_feature, initial_offset, initial_offset_norm, ten_unit, num_units \
-            = test_dataset.load_movie_slidingclip(movie_name)
+        movie_clip_sentences, global_feature, original_feats, \
+        initial_feature, initial_offset, initial_offset_norm, \
+        ten_unit, num_units = movie_slidingclip
 
         global_feature = torch.from_numpy(global_feature).float().cuda().unsqueeze(0)
         original_feats = torch.from_numpy(original_feats).float().cuda().unsqueeze(0)
