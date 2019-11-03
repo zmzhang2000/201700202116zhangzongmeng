@@ -33,6 +33,7 @@ class Charades_Train_dataset(torch.utils.data.Dataset):
 
         self.clip_sentence_pairs_iou_all = pickle.load(
             open(os.path.join(self.data_path, "charades_rl_train_feature_all_glove_embedding.pkl"), 'rb'), encoding='iso-8859-1')
+        self.clip_sentence_pairs_iou_all = self.clip_sentence_pairs_iou_all[:int(len(self.clip_sentence_pairs_iou_all)/2)]
         ''' 
         charades_rl_train_feature_all: [item0, item1...]
         
