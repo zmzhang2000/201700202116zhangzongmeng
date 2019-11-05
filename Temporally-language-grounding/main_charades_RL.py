@@ -307,6 +307,7 @@ def train(epoch):
             hidden_state, logit, value, tIoU, location, reconstruction_prob = net(global_feature, current_feature,
                                 token_embeddings, target, current_offset_norm, hidden_state)
 
+            reconstruction_prob = reconstruction_prob + 0.001
             log_reconstruction_prob = torch.log(reconstruction_prob)
             cap_loss = -log_reconstruction_prob.mean(dim=1)
             prob = F.softmax(logit, dim=1)
@@ -408,7 +409,7 @@ def train(epoch):
         loc_loss /= loc_id
 
         optimizer.zero_grad()
-        (policy_loss + value_loss + iou_loss + loc_loss + caption_loss).backward(retain_graph=True)
+        (policy_loss + value_loss + iou_loss + loc_loss + 0.001*caption_loss).backward(retain_graph=True)
         optimizer.step()
 
         print("Train Epoch: %d | Index: %d / %d | policy loss: %f" % (
