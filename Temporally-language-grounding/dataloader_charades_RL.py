@@ -181,7 +181,7 @@ class Charades_Test_dataset(torch.utils.data.Dataset):
         self.epochs_completed = 0
 
         self.clip_sentence_pairs = pickle.load(
-            open(os.path.join(self.data_path, "ref_info/charades_sta_test_semantic_sentence_VP_sub_obj_glove_embedding.pkl"), 'rb'),
+            open(os.path.join(self.data_path, "ref_info/charades_rl_test_bert_500.pkl"), 'rb'),
             encoding='iso-8859-1')
         print(str(len(self.clip_sentence_pairs)) + " test videos are readed")  # 1334
         '''

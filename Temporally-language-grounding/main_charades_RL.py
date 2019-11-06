@@ -338,8 +338,8 @@ def train(epoch):
                     current_feature_med = torch.mean(current_feature_med, dim=0)
                     current_feature[i] = current_feature_med
 
-            reward = calculate_reward_batch_withstop(Previou_IoU, current_IoU, step + 1) + 0.1 * reconstruction_prob.cpu()
-            reconstr_rewards[step, :] = 0.1 * reconstruction_prob.cpu()
+            reward = calculate_reward_batch_withstop(Previou_IoU, current_IoU, step + 1) + 10 * reconstruction_prob.cpu()
+            reconstr_rewards[step, :] = 10 * reconstruction_prob.cpu()
             values[step, :] = value.squeeze(1)
             log_probs[step, :] = log_prob.squeeze(1)
             rewards[step, :] = reward

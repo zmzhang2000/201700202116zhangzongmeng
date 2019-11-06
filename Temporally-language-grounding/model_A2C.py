@@ -30,9 +30,9 @@ class A2C(nn.Module):
         self.visual_feature_dim = 4096
         self.vocab_size = 1089
 
-        self.lstm1 = nn.LSTM(input_size=self.word_embedding_size,
+        self.gru1 = nn.GRU(input_size=self.word_embedding_size,
                              hidden_size=512, batch_first=True)
-        self.lstm2 = nn.LSTM(input_size=512+self.visual_feature_dim,
+        self.gru2 = nn.GRU(input_size=512+self.visual_feature_dim,
                              hidden_size=512, batch_first=True)
         self.hidden2idx = nn.Linear(512, self.vocab_size)
         self.gobal_fc = nn.Linear(self.visual_feature_dim, 512)
@@ -65,16 +65,16 @@ class A2C(nn.Module):
         local_feature_norm = F.normalize(local_feature_norm, p=2, dim=1)
         local_feature_norm = F.relu(local_feature_norm)
 
-        output, (sentence_embedding, _) = self.lstm1(token_embeddings)
+        output, sentence_embedding = self.gru1(token_embeddings)
         sentence_embedding = sentence_embedding.view(-1,sentence_embedding.shape[-1])
-        lstm2_input = local_feature.unsqueeze(1).repeat(1, output.shape[1], 1)
-        lstm2_input = torch.cat((output, lstm2_input), dim=2)
-        output, self.hidden = self.lstm2(lstm2_input)
+        gru2_input = local_feature.unsqueeze(1).repeat(1, output.shape[1], 1)
+        gru2_input = torch.cat((output, gru2_input), dim=2)
+        output, self.hidden = self.gru2(gru2_input)
         output = self.hidden2idx(output)
         output = F.softmax(output, dim=2)
         reconstruction_prob = (output * target).sum(dim=2).mean()
 
-        senetence_feature = self.hidden[0].squeeze(0)
+        senetence_feature = self.hidden.squeeze(0)
         senetence_feature_norm = F.normalize(senetence_feature, p=2, dim=1)
         senetence_feature_norm = F.relu(senetence_feature_norm)
 
