@@ -56,12 +56,12 @@ class CTRL_Model(object):
         vv_feature = tf.reshape(tf.tile(visual_feat, [batch_size, 1]),
             [batch_size, batch_size, self.semantic_size])
         ss_feature = tf.reshape(tf.tile(sentence_embed,[1, batch_size]),[batch_size, batch_size, self.semantic_size])
-        concat_feature = tf.reshape(tf.concat(2,[vv_feature, ss_feature]),[batch_size, batch_size, self.semantic_size+self.semantic_size])
+        concat_feature = tf.reshape(tf.concat([vv_feature, ss_feature],2),[batch_size, batch_size, self.semantic_size+self.semantic_size])
         print concat_feature.get_shape().as_list()
-        mul_feature = tf.mul(vv_feature, ss_feature) 
+        mul_feature = tf.multiply(vv_feature, ss_feature)
         add_feature = tf.add(vv_feature, ss_feature)
         
-        comb_feature = tf.reshape(tf.concat(2, [mul_feature, add_feature, concat_feature]),[1, batch_size, batch_size, self.semantic_size*4])
+        comb_feature = tf.reshape(tf.concat([mul_feature, add_feature, concat_feature],2),[1, batch_size, batch_size, self.semantic_size*4])
         return comb_feature
     
     '''
@@ -96,7 +96,7 @@ class CTRL_Model(object):
     '''
     def compute_loss_reg(self, sim_reg_mat, offset_label):
 
-        sim_score_mat, p_reg_mat, l_reg_mat = tf.split(2, 3, sim_reg_mat)
+        sim_score_mat, p_reg_mat, l_reg_mat = tf.split(sim_reg_mat, 3, 2)
         sim_score_mat = tf.reshape(sim_score_mat, [self.batch_size, self.batch_size])
         l_reg_mat = tf.reshape(l_reg_mat, [self.batch_size, self.batch_size])
         p_reg_mat = tf.reshape(p_reg_mat, [self.batch_size, self.batch_size])
@@ -114,16 +114,16 @@ class CTRL_Model(object):
         I_half = tf.diag(tf.constant(0.5, shape=[self.batch_size]))
         batch_para_mat = tf.constant(self.alpha, shape=[self.batch_size, self.batch_size])
         para_mat = tf.add(I,batch_para_mat)
-        loss_mat = tf.log(tf.add(all1, tf.exp(tf.mul(mask_mat, sim_score_mat))))
-        loss_mat = tf.mul(loss_mat, para_mat)
+        loss_mat = tf.log(tf.add(all1, tf.exp(tf.multiply(mask_mat, sim_score_mat))))
+        loss_mat = tf.multiply(loss_mat, para_mat)
         loss_align = tf.reduce_mean(loss_mat)
         # regression loss
-        l_reg_diag = tf.matmul(tf.mul(l_reg_mat, I), tf.constant(1.0, shape=[self.batch_size, 1]))
-        p_reg_diag = tf.matmul(tf.mul(p_reg_mat, I), tf.constant(1.0, shape=[self.batch_size, 1]))
-        offset_pred = tf.concat(1, (p_reg_diag, l_reg_diag))
-        loss_reg = tf.reduce_mean(tf.abs(tf.sub(offset_pred, offset_label)))
+        l_reg_diag = tf.matmul(tf.multiply(l_reg_mat, I), tf.constant(1.0, shape=[self.batch_size, 1]))
+        p_reg_diag = tf.matmul(tf.multiply(p_reg_mat, I), tf.constant(1.0, shape=[self.batch_size, 1]))
+        offset_pred = tf.concat((p_reg_diag, l_reg_diag),1)
+        loss_reg = tf.reduce_mean(tf.abs(tf.subtract(offset_pred, offset_label)))
 
-        loss=tf.add(tf.mul(self.lambda_regression, loss_reg), loss_align)
+        loss=tf.add(tf.multiply(self.lambda_regression, loss_reg), loss_align)
         return loss, offset_pred, loss_reg
 
 
