@@ -20,9 +20,9 @@ class Charades_Train_dataset(torch.utils.data.Dataset):
         self.clip_softmax_dim = 400
         self.softmax_unit_size = 32
         self.spacy_vec_dim = 300
-        self.train_softmax_dir = './Dataset/Charades/train_softmax/'
-        self.sliding_clip_path = "./Dataset/Charades/all_fc6_unit16_overlap0.5/"
-        self.clip_sentence_pairs_iou = pickle.load(open("./Dataset/Charades/ref_info/charades_sta_train_semantic_sentence_VP_sub_obj.pkl"))
+        self.train_softmax_dir = '/home/share/hanxianjing/charades-features/charades_sta_visual_activity_concepts/train_softmax/'
+        self.sliding_clip_path = "/home/share/hanxianjing/charades-features/all_fc6_unit16_overlap0.5/"
+        self.clip_sentence_pairs_iou = pickle.load(open("/home/share/hanxianjing/charades-features/ref_info/charades_sta_train_semantic_sentence_VP_sub_obj.pkl"))
         self.num_videos = len(self.clip_sentence_pairs_iou)  # 5182
 
         # get the number of self.clip_sentence_pairs_iou
@@ -37,7 +37,7 @@ class Charades_Train_dataset(torch.utils.data.Dataset):
 
         # print self.clip_sentence_pairs_iou
         self.movie_length_dict = {}
-        with open("./Dataset/Charades/ref_info/charades_movie_length_info.txt")  as f:
+        with open("/home/share/hanxianjing/charades-features/ref_info/charades_movie_length_info.txt")  as f:
             for l in f:
                 self.movie_length_dict[l.rstrip().split(" ")[0]] = float(l.rstrip().split(" ")[1])
 
@@ -189,17 +189,17 @@ class Charades_Test_dataset(torch.utils.data.Dataset):
         self.unit_size = 16
         self.context_size = 128
         self.semantic_size = 4800
-        self.sliding_clip_path = "./Dataset/Charades/all_fc6_unit16_overlap0.5/"
+        self.sliding_clip_path = "/home/share/hanxianjing/charades-features/all_fc6_unit16_overlap0.5/"
         self.index_in_epoch = 0
         self.spacy_vec_dim = 300
         self.sent_vec_dim = 4800
         self.clip_softmax_dim = 400
         self.softmax_unit_size = 32
-        self.test_softmax_dir =  './Dataset/Charades/test_softmax/'
+        self.test_softmax_dir =  '/home/share/hanxianjing/charades-features/charades_sta_visual_activity_concepts/test_softmax/'
         self.epochs_completed = 0
-        self.test_swin_txt_path = "./Dataset/Charades/ref_info/charades_sta_test_swin_props_num_36364.txt"
+        self.test_swin_txt_path = "/home/share/hanxianjing/charades-features/ref_info/charades_sta_test_swin_props_num_36364.txt"
 
-        self.clip_sentence_pairs = pickle.load(open("./Dataset/Charades/ref_info/charades_sta_test_semantic_sentence_VP_sub_obj.pkl"))
+        self.clip_sentence_pairs = pickle.load(open("/home/share/hanxianjing/charades-features/ref_info/charades_sta_test_semantic_sentence_VP_sub_obj.pkl"))
         print(str(len(self.clip_sentence_pairs)) + " test videos are readed")  # 1334
 
         movie_names_set = set()
@@ -218,7 +218,7 @@ class Charades_Test_dataset(torch.utils.data.Dataset):
         print("sliding clips number for test: " + str(len(self.sliding_clip_names)))  # 36364
 
         self.movie_length_dict = {}
-        with open("./Dataset/Charades/ref_info/charades_movie_length_info.txt")  as f:
+        with open("/home/share/hanxianjing/charades-features/ref_info/charades_movie_length_info.txt")  as f:
             for l in f:
                 self.movie_length_dict[l.rstrip().split(" ")[0]] = float(l.rstrip().split(" ")[1])
 
