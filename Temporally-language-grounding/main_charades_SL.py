@@ -111,7 +111,7 @@ def train(epoch):
         optimizer.zero_grad()
         loss.backward()
         optimizer.step()
-        train_loss += loss.data[0]
+        train_loss += loss.data.item()
         print('Epoch: %d | Step: %d | Loss: %.3f | loss_align: %.3f | loss_reg: %.3f' % (epoch, batch_idx, train_loss / (batch_idx + 1), loss_align, loss_reg))
 
 def test(epoch):
@@ -130,13 +130,12 @@ def test(epoch):
     all_retrievd = 0.0
     all_number = len(test_dataset.movie_names)
     idx = 0
-    for movie_name in test_dataset.movie_names:
+    for movie_name, movie_slidingclip in zip(test_dataset.movie_names,
+                                             test_dataset.multi_process_load_clip(20)):
         idx += 1
         print("%d/%d" % (idx, all_number))
-
-        movie_clip_featmaps, movie_clip_sentences = test_dataset.load_movie_slidingclip(movie_name, 16)
-        print("sentences: " + str(len(movie_clip_sentences)))
-        print("clips: " + str(len(movie_clip_featmaps)))  # candidate clips)
+        print("Test movie: " + movie_name + "....loading movie data")
+        movie_clip_featmaps, movie_clip_sentences = movie_slidingclip
 
         sentence_image_mat = np.zeros([len(movie_clip_sentences), len(movie_clip_featmaps)])
         sentence_image_reg_mat = np.zeros([len(movie_clip_sentences), len(movie_clip_featmaps), 2])

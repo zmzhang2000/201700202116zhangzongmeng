@@ -22,7 +22,7 @@ class Charades_Train_dataset(torch.utils.data.Dataset):
         self.spacy_vec_dim = 300
         self.train_softmax_dir = '/home/share/hanxianjing/charades-features/charades_sta_visual_activity_concepts/train_softmax/'
         self.sliding_clip_path = "/home/share/hanxianjing/charades-features/all_fc6_unit16_overlap0.5/"
-        self.clip_sentence_pairs_iou = pickle.load(open("/home/share/hanxianjing/charades-features/ref_info/charades_sta_train_semantic_sentence_VP_sub_obj.pkl"))
+        self.clip_sentence_pairs_iou = pickle.load(open("/home/share/hanxianjing/charades-features/ref_info/charades_sta_train_semantic_sentence_VP_sub_obj.pkl","rb"),encoding='iso-8859-1')
         self.num_videos = len(self.clip_sentence_pairs_iou)  # 5182
 
         # get the number of self.clip_sentence_pairs_iou
@@ -46,7 +46,7 @@ class Charades_Train_dataset(torch.utils.data.Dataset):
         movie_name = clip_name.split("_")[0]
         start = int(clip_name.split("_")[1])
         end = int(clip_name.split("_")[2])
-        num_units = (end - start) / self.unit_size
+        num_units = int((end - start) / self.unit_size)
         # print(start, end, num_units)
         curr_start = start
 
@@ -67,7 +67,7 @@ class Charades_Train_dataset(torch.utils.data.Dataset):
         movie_name = clip_name.split("_")[0]
         start = int(clip_name.split("_")[1])
         end = int(clip_name.split("_")[2])
-        num_units = (end - start) / self.unit_size - (self.softmax_unit_size / self.unit_size) + 1
+        num_units = int((end - start) / self.unit_size - (self.softmax_unit_size / self.unit_size) + 1)
         _is_clip_shorter_than_unit_size = False
         if num_units <= 0:
             num_units = 1
@@ -180,7 +180,7 @@ class Charades_Train_dataset(torch.utils.data.Dataset):
 
 class Charades_Test_dataset(torch.utils.data.Dataset):
     def __init__(self):
-
+        self.load_clip_dict = {}
         # il_path: image_label_file path
         self.context_num = 1
         self.context_size = 128
@@ -199,7 +199,7 @@ class Charades_Test_dataset(torch.utils.data.Dataset):
         self.epochs_completed = 0
         self.test_swin_txt_path = "/home/share/hanxianjing/charades-features/ref_info/charades_sta_test_swin_props_num_36364.txt"
 
-        self.clip_sentence_pairs = pickle.load(open("/home/share/hanxianjing/charades-features/ref_info/charades_sta_test_semantic_sentence_VP_sub_obj.pkl"))
+        self.clip_sentence_pairs = pickle.load(open("/home/share/hanxianjing/charades-features/ref_info/charades_sta_test_semantic_sentence_VP_sub_obj.pkl","rb"), encoding='iso-8859-1')
         print(str(len(self.clip_sentence_pairs)) + " test videos are readed")  # 1334
 
         movie_names_set = set()
@@ -228,7 +228,7 @@ class Charades_Test_dataset(torch.utils.data.Dataset):
         movie_name = clip_name.split("_")[0]
         start = int(clip_name.split("_")[1])
         end = int(clip_name.split("_")[2])
-        num_units = (end - start) / self.unit_size
+        num_units = int((end - start) / self.unit_size)
         curr_start = start
 
         start_end_list = []
@@ -248,7 +248,7 @@ class Charades_Test_dataset(torch.utils.data.Dataset):
         movie_name = clip_name.split("_")[0]
         start = int(clip_name.split("_")[1])
         end = int(clip_name.split("_")[2])
-        num_units = (end - start) / self.unit_size - (self.softmax_unit_size / self.unit_size) + 1
+        num_units = int((end - start) / self.unit_size - (self.softmax_unit_size / self.unit_size) + 1)
         _is_clip_shorter_than_unit_size = False
         if num_units <= 0:
             num_units = 1
@@ -323,7 +323,7 @@ class Charades_Test_dataset(torch.utils.data.Dataset):
         return np.mean(left_context_feats, axis=0), np.mean(right_context_feats, axis=0)
 
 
-    def load_movie_slidingclip(self, movie_name, sample_num):
+    def load_movie_slidingclip(self, movie_name):
         # load unit level feats and sentence vector
         movie_clip_sentences = []
         movie_clip_featmap = []
@@ -365,5 +365,19 @@ class Charades_Test_dataset(torch.utils.data.Dataset):
                 # movie_clip_featmap.append((self.sliding_clip_na
         return movie_clip_featmap, movie_clip_sentences
 
-
+    def multi_process_load_clip(self, chunk):
+        try:
+            for movie_name in self.movie_names:
+                yield self.load_clip_dict[movie_name]
+        except Exception as e:
+            from concurrent.futures import ProcessPoolExecutor, ThreadPoolExecutor
+            with ProcessPoolExecutor() as pool:
+                for i in range(0, len(self.movie_names), chunk):
+                    for i, movie_name in zip([
+                        pool.submit(self.load_movie_slidingclip, movie_name)
+                        for movie_name in self.movie_names[i:i+chunk]
+                    ], self.movie_names[i:i+chunk]):
+                        data = i.result()
+                        self.load_clip_dict[movie_name] = data
+                        yield data
 
