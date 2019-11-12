@@ -251,5 +251,5 @@ if __name__ == '__main__':
         train(epoch)
         test(epoch)
 
-print("best_R1_IOU5: %0.3f in epoch: %d " % best_R1_IOU5, best_R1_IOU5_epoch)
-print("best_R5_IOU5: %0.3f in epoch: %d " % best_R5_IOU5, best_R5_IOU5_epoch)
+print("best_R1_IOU5: %0.3f in epoch: %d " % (best_R1_IOU5, best_R1_IOU5_epoch))
+print("best_R5_IOU5: %0.3f in epoch: %d " % (best_R5_IOU5, best_R5_IOU5_epoch))
