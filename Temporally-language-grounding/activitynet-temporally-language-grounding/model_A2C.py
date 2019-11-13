@@ -27,8 +27,8 @@ class A2C(nn.Module):
     def __init__(self):
         super(A2C, self).__init__()
         self.word_embedding_size = 300
-        self.visual_feature_dim = 4096
-        self.vocab_size = 1089
+        self.visual_feature_dim = 500
+        self.vocab_size = 11255
 
         self.lstm1 = nn.LSTM(input_size=self.word_embedding_size,
                              hidden_size=512, batch_first=True)
