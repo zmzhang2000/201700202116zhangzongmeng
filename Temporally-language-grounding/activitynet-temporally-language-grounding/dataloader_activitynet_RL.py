@@ -70,6 +70,7 @@ class Activitynet_Train_dataset(torch.utils.data.Dataset):
 
     def __getitem__(self, index):
         # print(index)
+        feats_dim = 500
         offset = np.zeros(2, dtype=np.float32)
         offset_norm = np.zeros(2, dtype=np.float32)
         initial_offset = np.zeros(2, dtype=np.float32)
@@ -108,7 +109,9 @@ class Activitynet_Train_dataset(torch.utils.data.Dataset):
         initial_offset_norm[0] = initial_offset_start_norm
         initial_offset_norm[1] = initial_offset_end_norm
 
-        return global_feature, original_feats, initial_feature, token_embeddings, target, offset_norm, initial_offset, initial_offset_norm, ten_unit, num_units
+        original_feats_padding = np.zeros((3700, feats_dim), dtype=np.float32)
+        original_feats_padding[:original_feats.shape[0]] = original_feats
+        return global_feature, original_feats_padding, initial_feature, token_embeddings, target, offset_norm, initial_offset, initial_offset_norm, ten_unit, num_units
 
     def __len__(self):
         return self.num_samples_iou
@@ -197,30 +200,18 @@ class Activitynet_Test_dataset(torch.utils.data.Dataset):
 
         return movie_clip_sentences, global_feature, original_feats, initial_feature, initial_offset, initial_offset_norm, ten_unit, num_units
 
-    def multi_process_load_clip(self, chunk: int):
-        try:
-            for movie_name in self.movie_names:
-                yield self.load_clip_dict[movie_name]
-        except Exception as e:
-            from concurrent.futures import ProcessPoolExecutor, ThreadPoolExecutor
-            with ProcessPoolExecutor() as pool:
-                for i in range(0, len(self.movie_names), chunk):
-                    for i, movie_name in zip([
-                        pool.submit(self.load_movie_slidingclip, movie_name)
-                        for movie_name in self.movie_names[i:i + chunk]
-                    ], self.movie_names[i:i + chunk]):
-                        data = i.result()
-                        self.load_clip_dict[movie_name] = data
-                        yield data
-
-
 if __name__ == '__main__':
-    tr = Activitynet_Train_dataset()
-    for i in tr:
-        pass
-    print('train pass')
+    # tr = Activitynet_Train_dataset()
+    # trainloader = torch.utils.data.DataLoader(dataset=tr,
+    #                                           batch_size=32,
+    #                                           shuffle=True,
+    #                                           num_workers=4,
+    #                                           pin_memory=True)
+    # for i in trainloader:
+    #     pass
+    # print('train pass')
     te = Activitynet_Test_dataset()
-    for movie_name, movie_slidingclip in zip(te.movie_names,
-                                             te.multi_process_load_clip(20)):
-        pass
+    for movie_name in te.movie_names:
+        print(movie_name)
+        temp = te.load_movie_slidingclip(movie_name)
     print('test pass')
