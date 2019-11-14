@@ -8,85 +8,35 @@ import numpy as np
 import math
 from utils import *
 import random
+import h5py
 
 class Charades_Train_dataset(torch.utils.data.Dataset):
     def __init__(self):
         self.feats_dimen = 500
+        self.context_num = 1
+        self.context_size = 128
         self.sent_vec_dim = 4800
-        self.clip_softmax_dim = 400
-        self.softmax_unit_size = 32
-        self.spacy_vec_dim = 300
-        self.train_softmax_dir = '/home/share/hanxianjing/charades-features/charades_sta_visual_activity_concepts/train_softmax/'
-        self.sliding_clip_path = "/home/share/hanxianjing/charades-features/all_fc6_unit16_overlap0.5/"
-        self.clip_sentence_pairs_iou = pickle.load(open("/home/share/hanxianjing/charades-features/ref_info/charades_sta_train_semantic_sentence_VP_sub_obj.pkl","rb"),encoding='iso-8859-1')
-        self.num_videos = len(self.clip_sentence_pairs_iou)  # 5182
 
-        # get the number of self.clip_sentence_pairs_iou
-        self.clip_sentence_pairs_iou_all = []
-        for ii in self.clip_sentence_pairs_iou:
-            for iii in self.clip_sentence_pairs_iou[ii]:
-                for iiii in range(len(self.clip_sentence_pairs_iou[ii][iii])):
-                    self.clip_sentence_pairs_iou_all.append(self.clip_sentence_pairs_iou[ii][iii][iiii])
+        self.proposals = os.path.join(self.data_path, "activitynet_v1-3_proposals.hdf5")
+        self.c3d_features = os.path.join(self.data_path, "sub_activitynet_v1-3.c3d.hdf5")
+        self.clip_sentence_pairs_iou_all = pickle.load(open(os.path.join(self.data_path, "activitynet_rl_train_feature_all_glove_embedding_final.pkl"), 'rb'))
 
         self.num_samples_iou = len(self.clip_sentence_pairs_iou_all)
         print((self.num_samples_iou, "iou clip-sentence pairs are readed"))  # 49442
 
-    def read_unit_level_feats(self, clip_name):
+    def read_unit_level_feats(self, movie_name, start_norm, end_norm):
         # read unit level feats by just passing the start and end number
-        movie_name = clip_name.split("_")[0]
-        start = int(clip_name.split("_")[1])
-        end = int(clip_name.split("_")[2])
-        num_units = int((end - start) / self.unit_size)
-        # print(start, end, num_units)
-        curr_start = start
-
-        start_end_list = []
-        while (curr_start + self.unit_size <= end):
-            start_end_list.append((curr_start, curr_start + self.unit_size))
-            curr_start += self.unit_size
-
-        original_feats = np.zeros([num_units, self.feats_dimen], dtype=np.float32)
-        for k, (curr_s, curr_e) in enumerate(start_end_list):
-            one_feat = np.load(self.sliding_clip_path + movie_name + "_" + str(curr_s) + ".0_" + str(curr_e) + ".0.npy")
-            original_feats[k] = one_feat
+        c3d_features = h5py.File(self.c3d_features,'r')
+        original_feats = c3d_features[movie_name]['c3d_features'][:]
+        start_row = int(original_feats.shape[0]*start_norm)
+        end_row = int(original_feats.shape[0]*end_norm)
+        if start_row == end_row and end_row == original_feats.shape[0]:
+            start_row -= 1
+        else:
+            end_row += 1
+        original_feats = original_feats[start_row:end_row]
 
         return np.mean(original_feats, axis=0)
-
-    def read_unit_level_softmax(self, clip_name):
-        # read unit level softmax by just passing the start and end number
-        movie_name = clip_name.split("_")[0]
-        start = int(clip_name.split("_")[1])
-        end = int(clip_name.split("_")[2])
-        num_units = int((end - start) / self.unit_size - (self.softmax_unit_size / self.unit_size) + 1)
-        _is_clip_shorter_than_unit_size = False
-        if num_units <= 0:
-            num_units = 1
-            _is_clip_shorter_than_unit_size = True
-
-        softmax_feats = np.zeros([num_units, self.clip_softmax_dim], dtype=np.float32)
-        if _is_clip_shorter_than_unit_size:
-            _start_here = start
-            _end_here = end
-            _npy_file_path_this = self.train_softmax_dir + movie_name + ".mp4_" + str(curr_s) + "_" + str(
-                curr_e) + ".npy"
-            if not os.path.exists(_npy_file_path_this):
-                _npy_file_path_this = self.train_softmax_dir + movie_name + ".mp4_" + str(curr_s) + "_" + str(
-                    curr_e) + ".npy"
-            one_feat = np.load(_npy_file_path_this)
-            softmax_feats[0] = one_feat
-
-        else:
-            curr_start = start
-            start_end_list = []
-            while (curr_start + self.softmax_unit_size <= end):
-                start_end_list.append((curr_start, curr_start + self.softmax_unit_size))
-                curr_start += self.unit_size
-            for k, (curr_s, curr_e) in enumerate(start_end_list):
-                one_feat = np.load(
-                    self.train_softmax_dir + movie_name + ".mp4_" + str(curr_s) + "_" + str(curr_e) + ".npy")
-                softmax_feats[k] = one_feat
-
-        return np.mean(softmax_feats, axis=0)
 
     def feat_exists(self, clip_name):
         # judge the feats is existed or not
@@ -99,7 +49,7 @@ class Charades_Train_dataset(torch.utils.data.Dataset):
                os.path.exists(
                    self.sliding_clip_path + movie_name + "_" + str(start) + ".0_" + str(start + 16) + ".0.npy")
 
-    def get_context_window(self, clip_name, win_length):
+    def get_context_window(self, movie_name, start_norm, end_norm, win_length):
         # compute left (pre) and right (post) context features based on read_unit_level_feats().
         movie_name = clip_name.split("_")[0]
         start = int(clip_name.split("_")[1])
@@ -133,27 +83,19 @@ class Charades_Train_dataset(torch.utils.data.Dataset):
     def __getitem__(self, index):
 
         offset = np.zeros(2, dtype=np.float32)
-        VP_spacy = np.zeros(self.spacy_vec_dim*2, dtype=np.float32)
 
         # get this clip's: sentence  vector, swin, p_offest, l_offset, sentence, Vps
-        dict_3rd = self.clip_sentence_pairs_iou_all[index]
+        sample = self.clip_sentence_pairs_iou_all[index]
+        proposal = h5py.File(self.proposals,'r')[sample['video']]
+        start, end = proposal['segment-init'], proposal['segment-end']
+        start_norm, end_norm = start / sample['duration'], end / sample['duration']
         # read visual feats
-        featmap = self.read_unit_level_feats(dict_3rd['proposal_or_sliding_window'])
-        left_context_feat, right_context_feat = self.get_context_window(dict_3rd['proposal_or_sliding_window'], self.context_num)
+        featmap = self.read_unit_level_feats(sample['video'], start_norm, end_norm)
+        left_context_feat, right_context_feat = self.get_context_window(sample['video'], start_norm, end_norm, self.context_num)
         image = np.hstack((left_context_feat, featmap, right_context_feat))
-
-        # read softmax batch
-        softmax_center_clip = self.read_unit_level_softmax(dict_3rd['proposal_or_sliding_window'])
 
         # sentence batch
         sentence = dict_3rd['sent_skip_thought_vec'][0][0, :self.sent_vec_dim]
-
-        if len(dict_3rd['dobj_or_VP']) != 0:
-            VP_spacy_one_by_one_this_ = dict_3rd['VP_spacy_vec_one_by_one_word'][random.choice(range(len(dict_3rd['dobj_or_VP'])))]
-            if len(VP_spacy_one_by_one_this_) == 1:
-                VP_spacy[:self.spacy_vec_dim] = VP_spacy_one_by_one_this_[0]
-            else:
-                VP_spacy = np.concatenate((VP_spacy_one_by_one_this_[0], VP_spacy_one_by_one_this_[1]))
 
         # offest
         p_offset = dict_3rd['offset_start']
@@ -161,11 +103,10 @@ class Charades_Train_dataset(torch.utils.data.Dataset):
         offset[0] = p_offset
         offset[1] = l_offset
 
-        return image, sentence, offset, softmax_center_clip, VP_spacy
+        return image, sentence, offset
 
     def __len__(self):
         return self.num_samples_iou
-
 
 
 class Charades_Test_dataset(torch.utils.data.Dataset):
@@ -180,8 +121,6 @@ class Charades_Test_dataset(torch.utils.data.Dataset):
         self.index_in_epoch = 0
         self.spacy_vec_dim = 300
         self.sent_vec_dim = 4800
-        self.clip_softmax_dim = 400
-        self.softmax_unit_size = 32
         self.test_softmax_dir =  '/home/share/hanxianjing/charades-features/charades_sta_visual_activity_concepts/test_softmax/'
         self.epochs_completed = 0
         self.test_swin_txt_path = "/home/share/hanxianjing/charades-features/ref_info/charades_sta_test_swin_props_num_36364.txt"
@@ -223,43 +162,6 @@ class Charades_Test_dataset(torch.utils.data.Dataset):
             original_feats[k] = one_feat
 
         return np.mean(original_feats, axis=0)
-
-    def read_unit_level_softmax(self, clip_name):
-        # read unit level softmax by just passing the start and end number
-        movie_name = clip_name.split("_")[0]
-        start = int(clip_name.split("_")[1])
-        end = int(clip_name.split("_")[2])
-        num_units = int((end - start) / self.unit_size - (self.softmax_unit_size / self.unit_size) + 1)
-        _is_clip_shorter_than_unit_size = False
-        if num_units <= 0:
-            num_units = 1
-            _is_clip_shorter_than_unit_size = True
-
-        softmax_feats = np.zeros([num_units, self.clip_softmax_dim], dtype=np.float32)
-        if _is_clip_shorter_than_unit_size:
-            _start_here = start
-            _end_here = end
-            _npy_file_path_this = self.test_softmax_dir + movie_name + ".mp4_" + str(curr_s) + "_" + str(
-                curr_e) + ".npy"
-            if not os.path.exists(_npy_file_path_this):
-                _npy_file_path_this = self.test_softmax_dir + movie_name + ".mp4_" + str(curr_s) + "_" + str(
-                    curr_e) + ".npy"
-            one_feat = np.load(_npy_file_path_this)
-            softmax_feats[0] = one_feat
-
-        else:
-            curr_start = start
-            start_end_list = []
-            while (curr_start + self.softmax_unit_size <= end):
-                start_end_list.append((curr_start, curr_start + self.softmax_unit_size))
-                curr_start += self.unit_size
-            for k, (curr_s, curr_e) in enumerate(start_end_list):
-                one_feat = np.load(
-                    self.test_softmax_dir + movie_name + ".mp4_" + str(curr_s) + "_" + str(curr_e) + ".npy")
-                softmax_feats[k] = one_feat
-
-        return np.mean(softmax_feats, axis=0)
-
 
     def feat_exists(self, clip_name):
         # judge the feats is existed or not
