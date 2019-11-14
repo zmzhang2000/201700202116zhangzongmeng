@@ -29,8 +29,7 @@ class Activitynet_Train_dataset(torch.utils.data.Dataset):
         self.visual_feats_dimen = 500
         self.sentence_size = 20
         self.word_embedding_size = 300
-
-        # self.c3d_features = h5py.File(os.path.join(self.data_path, "sub_activitynet_v1-3.c3d.hdf5"),'r')
+        self.c3d_features = os.path.join(self.data_path, "sub_activitynet_v1-3.c3d.hdf5")
         self.clip_sentence_pairs_iou_all = pickle.load(open(os.path.join(self.data_path, "activitynet_rl_train_feature_all_glove_embedding_final.pkl"), 'rb'))
         vocab = pickle.load(open(os.path.join(self.data_path, "activitynet_rl_train_vocab.pkl"), 'rb'))
         self.vocab, self.embeddings = vocab['words'], vocab['embeddings']
@@ -46,7 +45,7 @@ class Activitynet_Train_dataset(torch.utils.data.Dataset):
 
     def read_video_level_feats(self, movie_name):
         # read unit level feats by just passing the start and end number
-        c3d_features = h5py.File(os.path.join(self.data_path, "sub_activitynet_v1-3.c3d.hdf5"),'r')
+        c3d_features = h5py.File(self.c3d_features,'r')
         original_feats = c3d_features[movie_name]['c3d_features'][:]
         num_units = original_feats.shape[0]
         ten_unit = int(num_units / 10)
@@ -149,7 +148,7 @@ class Activitynet_Test_dataset(torch.utils.data.Dataset):
 
     def read_video_level_feats(self, movie_name):
         # read unit level feats by just passing the start and end number
-        c3d_features = h5py.File(os.path.join(self.data_path, "sub_activitynet_v1-3.c3d.hdf5"),'r')
+        c3d_features = h5py.File(self.c3d_features,'r')
         original_feats = c3d_features[movie_name]['c3d_features'][:]
         num_units = original_feats.shape[0]
         ten_unit = int(num_units / 10)
