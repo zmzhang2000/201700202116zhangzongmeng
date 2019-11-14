@@ -1,4 +1,4 @@
-" Dataloader of charades-STA dataset for Supervised Learning based methods"
+" Dataloader of ActivityNet DenseCaption dataset for Supervised Learning based methods"
 
 import torch
 import torch.utils.data
@@ -9,14 +9,15 @@ import math
 from utils import *
 import random
 import h5py
+import json
 
-class Charades_Train_dataset(torch.utils.data.Dataset):
+class Activitynet_Train_dataset(torch.utils.data.Dataset):
     def __init__(self):
         self.feats_dimen = 500
         self.context_num = 1
         self.context_size = 128
         self.sent_vec_dim = 4800
-
+        self.data_path = '/home/share/hanxianjing/activityNet'
         self.proposals = os.path.join(self.data_path, "activitynet_v1-3_proposals.hdf5")
         self.c3d_features = os.path.join(self.data_path, "sub_activitynet_v1-3.c3d.hdf5")
         self.clip_sentence_pairs_iou_all = pickle.load(open(os.path.join(self.data_path, "activitynet_rl_train_feature_all_glove_embedding_final.pkl"), 'rb'))
@@ -24,61 +25,46 @@ class Charades_Train_dataset(torch.utils.data.Dataset):
         self.num_samples_iou = len(self.clip_sentence_pairs_iou_all)
         print((self.num_samples_iou, "iou clip-sentence pairs are readed"))  # 49442
 
+    def correct_win(self, start, end, max_row):
+        start = max(0, start)
+        end = min(max_row, end)
+        if start > end:
+            start, end = end, start
+        if start == end:
+            if start == 0:
+                end += 1
+            if start == max_row:
+                start -= 1
+            else:
+                end += 1
+        return start, end
+
     def read_unit_level_feats(self, movie_name, start_norm, end_norm):
         # read unit level feats by just passing the start and end number
+
         c3d_features = h5py.File(self.c3d_features,'r')
         original_feats = c3d_features[movie_name]['c3d_features'][:]
-        start_row = int(original_feats.shape[0]*start_norm)
-        end_row = int(original_feats.shape[0]*end_norm)
-        if start_row == end_row and end_row == original_feats.shape[0]:
-            start_row -= 1
-        else:
-            end_row += 1
-        original_feats = original_feats[start_row:end_row]
+        total_row = original_feats.shape[0]
+        start_row = int(total_row*start_norm)
+        end_row = int(total_row*end_norm)
+        start_row, end_row = self.correct_win(start_row, end_row, total_row)
+        original_feats_1 = np.mean(original_feats[start_row: end_row], axis=0)
 
-        return np.mean(original_feats, axis=0)
+        left_start_row = int(start_row - total_row / 5)
+        left_end_row = start_row
+        left_start_row, left_end_row = self.correct_win(left_start_row, left_end_row, total_row)
+        if left_start_row >= left_end_row:
+            print('error1')
+        left_context_feat = np.mean(original_feats[left_start_row: left_end_row], axis=0)
 
-    def feat_exists(self, clip_name):
-        # judge the feats is existed or not
-        movie_name = clip_name.split("_")[0]
-        start = int(clip_name.split("_")[1])
-        end = int(clip_name.split("_")[2])
+        right_end_row = int(end_row + total_row / 5)
+        right_start_row = end_row
+        right_start_row, right_end_row = self.correct_win(right_start_row, right_end_row, total_row)
+        if right_start_row >= right_end_row:
+            print('error2')
+        right_context_feat = np.mean(original_feats[right_start_row: right_end_row], axis=0)
 
-        return os.path.exists(
-            self.sliding_clip_path + movie_name + "_" + str(end - 16) + ".0_" + str(end) + ".0.npy") and \
-               os.path.exists(
-                   self.sliding_clip_path + movie_name + "_" + str(start) + ".0_" + str(start + 16) + ".0.npy")
-
-    def get_context_window(self, movie_name, start_norm, end_norm, win_length):
-        # compute left (pre) and right (post) context features based on read_unit_level_feats().
-        movie_name = clip_name.split("_")[0]
-        start = int(clip_name.split("_")[1])
-        end = int(clip_name.split("_")[2])
-        clip_length = self.context_size
-        left_context_feats = np.zeros([win_length, self.feats_dimen], dtype=np.float32)
-        right_context_feats = np.zeros([win_length, self.feats_dimen], dtype=np.float32)
-        last_left_feat = self.read_unit_level_feats(clip_name)
-        last_right_feat = self.read_unit_level_feats(clip_name)
-        for k in range(win_length):
-            left_context_start = start - clip_length * (k + 1)
-            left_context_end = start - clip_length * k
-            right_context_start = end + clip_length * k
-            right_context_end = end + clip_length * (k + 1)
-            left_context_name = movie_name + "_" + str(left_context_start) + "_" + str(left_context_end)
-            right_context_name = movie_name + "_" + str(right_context_start) + "_" + str(right_context_end)
-            if self.feat_exists(left_context_name):
-                left_context_feat = self.read_unit_level_feats(left_context_name)
-                last_left_feat = left_context_feat
-            else:
-                left_context_feat = last_left_feat
-            if self.feat_exists(right_context_name):
-                right_context_feat = self.read_unit_level_feats(right_context_name)
-                last_right_feat = right_context_feat
-            else:
-                right_context_feat = last_right_feat
-            left_context_feats[k] = left_context_feat
-            right_context_feats[k] = right_context_feat
-        return np.mean(left_context_feats, axis=0), np.mean(right_context_feats, axis=0)
+        return left_context_feat, original_feats_1, right_context_feat
 
     def __getitem__(self, index):
 
@@ -86,20 +72,18 @@ class Charades_Train_dataset(torch.utils.data.Dataset):
 
         # get this clip's: sentence  vector, swin, p_offest, l_offset, sentence, Vps
         sample = self.clip_sentence_pairs_iou_all[index]
-        proposal = h5py.File(self.proposals,'r')[sample['video']]
-        start, end = proposal['segment-init'], proposal['segment-end']
+        proposal = h5py.File(self.proposals, 'r')[sample['video']]
+        start, end = proposal['segment-init'][0], proposal['segment-end'][0]
         start_norm, end_norm = start / sample['duration'], end / sample['duration']
         # read visual feats
-        featmap = self.read_unit_level_feats(sample['video'], start_norm, end_norm)
-        left_context_feat, right_context_feat = self.get_context_window(sample['video'], start_norm, end_norm, self.context_num)
+        left_context_feat, featmap, right_context_feat = self.read_unit_level_feats(sample['video'], start_norm, end_norm)
         image = np.hstack((left_context_feat, featmap, right_context_feat))
-
         # sentence batch
-        sentence = dict_3rd['sent_skip_thought_vec'][0][0, :self.sent_vec_dim]
+        sentence = sample['sent_skip_thought_vec'][0][0, :self.sent_vec_dim]
 
         # offest
-        p_offset = dict_3rd['offset_start']
-        l_offset = dict_3rd['offset_end']
+        p_offset = sample['offset_start']
+        l_offset = sample['offset_end']
         offset[0] = p_offset
         offset[1] = l_offset
 
@@ -109,101 +93,70 @@ class Charades_Train_dataset(torch.utils.data.Dataset):
         return self.num_samples_iou
 
 
-class Charades_Test_dataset(torch.utils.data.Dataset):
+class Activitynet_Test_dataset(torch.utils.data.Dataset):
     def __init__(self):
-        self.load_clip_dict = {}
-        # il_path: image_label_file path
+        self.data_path = '/home/share/hanxianjing/activityNet'
         self.feats_dimen = 500
-        self.unit_size = 16
-        self.context_size = 128
         self.semantic_size = 4800
-        self.sliding_clip_path = "/home/share/hanxianjing/charades-features/all_fc6_unit16_overlap0.5/"
         self.index_in_epoch = 0
-        self.spacy_vec_dim = 300
         self.sent_vec_dim = 4800
-        self.test_softmax_dir =  '/home/share/hanxianjing/charades-features/charades_sta_visual_activity_concepts/test_softmax/'
         self.epochs_completed = 0
-        self.test_swin_txt_path = "/home/share/hanxianjing/charades-features/ref_info/charades_sta_test_swin_props_num_36364.txt"
+        self.proposals = os.path.join(self.data_path, "activitynet_v1-3_proposals.hdf5")
+        self.c3d_features = os.path.join(self.data_path, "sub_activitynet_v1-3.c3d.hdf5")
+        self.clip_sentence_pairs = pickle.load(open(os.path.join(self.data_path, "activitynet_rl_test_feature_all_glove_embedding_final.pkl"),"rb"), encoding='iso-8859-1')
+        with open(os.path.join(self.data_path,'activity_net.v1-3.min.json'), 'r') as f:
+            self.duration = json.load(f)['database']
 
-        self.clip_sentence_pairs = pickle.load(open("/home/share/hanxianjing/charades-features/ref_info/charades_sta_test_semantic_sentence_VP_sub_obj.pkl","rb"), encoding='iso-8859-1')
         print(str(len(self.clip_sentence_pairs)) + " test videos are readed")  # 1334
 
         movie_names_set = set()
         for ii in self.clip_sentence_pairs:
             for iii in self.clip_sentence_pairs[ii]:
-                clip_name = iii
                 movie_name = ii
                 if not movie_name in movie_names_set:
                     movie_names_set.add(movie_name)
         self.movie_names = list(movie_names_set)
 
-        self.sliding_clip_names = []
-        with open(self.test_swin_txt_path) as f:
-            for l in f:
-                self.sliding_clip_names.append(l.rstrip().replace(" ", "_"))
-        print("sliding clips number for test: " + str(len(self.sliding_clip_names)))  # 36364
+    def correct_win(self, start, end, max_row):
+        start = max(0, start)
+        end = min(max_row, end)
+        if start > end:
+            start, end = end, start
+        if start == end:
+            if start == 0:
+                end += 1
+            if start == max_row:
+                start -= 1
+            else:
+                end += 1
+        return start, end
 
-    def read_unit_level_feats(self, clip_name):
+    def read_unit_level_feats(self, movie_name, start_norm, end_norm):
         # read unit level feats by just passing the start and end number
-        movie_name = clip_name.split("_")[0]
-        start = int(clip_name.split("_")[1])
-        end = int(clip_name.split("_")[2])
-        num_units = int((end - start) / self.unit_size)
-        curr_start = start
 
-        start_end_list = []
-        while (curr_start + self.unit_size <= end):
-            start_end_list.append((curr_start, curr_start + self.unit_size))
-            curr_start += self.unit_size
+        c3d_features = h5py.File(self.c3d_features, 'r')
+        original_feats = c3d_features[movie_name]['c3d_features'][:]
+        total_row = original_feats.shape[0]
+        start_row = int(total_row * start_norm)
+        end_row = int(total_row * end_norm)
+        start_row, end_row = self.correct_win(start_row, end_row, total_row)
+        original_feats_1 = np.mean(original_feats[start_row: end_row], axis=0)
 
-        original_feats = np.zeros([num_units, self.feats_dimen], dtype=np.float32)
-        for k, (curr_s, curr_e) in enumerate(start_end_list):
-            one_feat = np.load(self.sliding_clip_path + movie_name + "_" + str(curr_s) + ".0_" + str(curr_e) + ".0.npy")
-            original_feats[k] = one_feat
+        left_start_row = int(start_row - total_row / 5)
+        left_end_row = start_row
+        left_start_row, left_end_row = self.correct_win(left_start_row, left_end_row, total_row)
+        if left_start_row >= left_end_row:
+            print('error1')
+        left_context_feat = np.mean(original_feats[left_start_row: left_end_row], axis=0)
 
-        return np.mean(original_feats, axis=0)
+        right_end_row = int(end_row + total_row / 5)
+        right_start_row = end_row
+        right_start_row, right_end_row = self.correct_win(right_start_row, right_end_row, total_row)
+        if right_start_row >= right_end_row:
+            print('error2')
+        right_context_feat = np.mean(original_feats[right_start_row: right_end_row], axis=0)
 
-    def feat_exists(self, clip_name):
-        # judge the feats is existed or not
-        movie_name = clip_name.split("_")[0]
-        start = int(clip_name.split("_")[1])
-        end = int(clip_name.split("_")[2])
-
-        return os.path.exists(
-            self.sliding_clip_path + movie_name + "_" + str(end - 16) + ".0_" + str(end) + ".0.npy") and \
-               os.path.exists(
-                   self.sliding_clip_path + movie_name + "_" + str(start) + ".0_" + str(start + 16) + ".0.npy")
-
-    def get_context_window(self, clip_name, win_length):
-        # compute left (pre) and right (post) context features based on read_unit_level_feats().
-        movie_name = clip_name.split("_")[0]
-        start = int(clip_name.split("_")[1])
-        end = int(clip_name.split("_")[2])
-        clip_length = self.context_size
-        left_context_feats = np.zeros([win_length, self.feats_dimen], dtype=np.float32)
-        right_context_feats = np.zeros([win_length, self.feats_dimen], dtype=np.float32)
-        last_left_feat = self.read_unit_level_feats(clip_name)
-        last_right_feat = self.read_unit_level_feats(clip_name)
-        for k in range(win_length):
-            left_context_start = start - clip_length * (k + 1)
-            left_context_end = start - clip_length * k
-            right_context_start = end + clip_length * k
-            right_context_end = end + clip_length * (k + 1)
-            left_context_name = movie_name + "_" + str(left_context_start) + "_" + str(left_context_end)
-            right_context_name = movie_name + "_" + str(right_context_start) + "_" + str(right_context_end)
-            if self.feat_exists(left_context_name):
-                left_context_feat = self.read_unit_level_feats(left_context_name)
-                last_left_feat = left_context_feat
-            else:
-                left_context_feat = last_left_feat
-            if self.feat_exists(right_context_name):
-                right_context_feat = self.read_unit_level_feats(right_context_name)
-                last_right_feat = right_context_feat
-            else:
-                right_context_feat = last_right_feat
-            left_context_feats[k] = left_context_feat
-            right_context_feats[k] = right_context_feat
-        return np.mean(left_context_feats, axis=0), np.mean(right_context_feats, axis=0)
+        return left_context_feat, original_feats_1, right_context_feat
 
 
     def load_movie_slidingclip(self, movie_name):
@@ -213,54 +166,30 @@ class Charades_Test_dataset(torch.utils.data.Dataset):
 
         for dict_2nd in self.clip_sentence_pairs[movie_name]:
             for dict_3rd in self.clip_sentence_pairs[movie_name][dict_2nd]:
-
-                VP_spacy_vec_ = np.zeros(self.spacy_vec_dim * 2)
-                subj_spacy_vec_ = np.zeros(self.spacy_vec_dim)
-                obj_spacy_vec_ = np.zeros(self.spacy_vec_dim)
-
-                if len(dict_3rd['dobj_or_VP']) != 0:
-                    VP_spacy_one_by_one_this_ = dict_3rd['VP_spacy_vec_one_by_one_word'][
-                        random.choice(range(len(dict_3rd['dobj_or_VP'])))]
-                    if len(VP_spacy_one_by_one_this_) == 1:
-                        VP_spacy_vec_[:self.spacy_vec_dim] = VP_spacy_one_by_one_this_[0]
-                    else:
-                        VP_spacy_vec_ = np.concatenate((VP_spacy_one_by_one_this_[0], VP_spacy_one_by_one_this_[1]))
-                if len(dict_3rd['subj']) != 0:
-                    subj_spacy_vec_ = dict_3rd['subj_spacy_vec'][random.choice(range(len(dict_3rd['subj'])))]
-                if len(dict_3rd['obj']) != 0:
-                    obj_spacy_vec_ = dict_3rd['obj_spacy_vec'][random.choice(range(len(dict_3rd['obj'])))]
-
                 sentence_vec_ = dict_3rd['sent_skip_thought_vec'][0][0, :self.sent_vec_dim]
+                movie_clip_sentences.append((dict_2nd, sentence_vec_))
+                duration = self.duration[movie_name[2:]]['duration']
+                proposal = h5py.File(self.proposals, 'r')[movie_name]
+                start, end = proposal['segment-init'][0], proposal['segment-end'][0]
+                start_norm, end_norm = start / duration, end / duration
+                # read visual feats
+                left_context_feat, featmap, right_context_feat = self.read_unit_level_feats(movie_name, start_norm, end_norm)
+                image = np.hstack((left_context_feat, featmap, right_context_feat))
+                movie_clip_featmap.append((movie_name+'_'+str(start)+'_'+str(end), image))
 
-                movie_clip_sentences.append((dict_2nd, sentence_vec_, VP_spacy_vec_, subj_spacy_vec_, obj_spacy_vec_))
-
-        for k in range(len(self.sliding_clip_names)):
-            if movie_name in self.sliding_clip_names[k]:
-                left_context_feat, right_context_feat = self.get_context_window(self.sliding_clip_names[k],
-                                                                                self.context_num)
-                feature_data = self.read_unit_level_feats(self.sliding_clip_names[k])
-
-                # read softmax batch
-                softmax_center_clip = self.read_unit_level_softmax(self.sliding_clip_names[k])
-
-                comb_feat = np.hstack((left_context_feat, feature_data, right_context_feat))
-                movie_clip_featmap.append((self.sliding_clip_names[k], comb_feat, softmax_center_clip))
-                # movie_clip_featmap.append((self.sliding_clip_na
         return movie_clip_featmap, movie_clip_sentences
 
-    def multi_process_load_clip(self, chunk):
-        try:
-            for movie_name in self.movie_names:
-                yield self.load_clip_dict[movie_name]
-        except Exception as e:
-            from concurrent.futures import ProcessPoolExecutor, ThreadPoolExecutor
-            with ProcessPoolExecutor() as pool:
-                for i in range(0, len(self.movie_names), chunk):
-                    for i, movie_name in zip([
-                        pool.submit(self.load_movie_slidingclip, movie_name)
-                        for movie_name in self.movie_names[i:i+chunk]
-                    ], self.movie_names[i:i+chunk]):
-                        data = i.result()
-                        self.load_clip_dict[movie_name] = data
-                        yield data
-
+if __name__ == "__main__":
+    a = Activitynet_Test_dataset()
+    for i in range(len(a.movie_names)):
+        a.load_movie_slidingclip(a.movie_names[i])
+        print(i)
+    # a = Activitynet_Train_dataset()
+    # print(a.__getitem__(0))
+    # trainloader = torch.utils.data.DataLoader(dataset=a,
+    #                                           batch_size=32,
+    #                                           shuffle=True,
+    #                                           num_workers=4)
+    # for idx, i in enumerate(trainloader):
+    #     print(idx)
+    # print('complete')
