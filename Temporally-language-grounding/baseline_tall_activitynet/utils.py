@@ -113,8 +113,8 @@ def compute_IoU_recall_top_n_forreg(top_n, iou_thresh, sentence_image_mat, sente
     correct_num = 0.0
     for k in range(sentence_image_mat.shape[0]):
         gt = sclips[k]
-        gt_start = float(gt.split("_")[1])
-        gt_end = float(gt.split("_")[2])
+        gt_start = float(gt.split("_")[0])
+        gt_end = float(gt.split("_")[1])
         #print gt +" "+str(gt_start)+" "+str(gt_end)
         sim_v = [v for v in sentence_image_mat[k]]
         starts = [s for s in sentence_image_reg_mat[k,:,0]]

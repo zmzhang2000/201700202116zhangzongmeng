@@ -1,6 +1,7 @@
-" Train and test file for Supervised Learning based methods (TALL) for ActivityNet DenseCaption dataset \
+"""
+Train and test file for Supervised Learning based methods (TALL) for ActivityNet DenseCaption dataset \
 TALL: Temporal Activity Localization via Language Query(http://openaccess.thecvf.com/content_ICCV_2017/papers/Gao_TALL_Temporal_Activity_ICCV_2017_paper.pdf) \
-
+"""
 
 import torch
 import torch.nn as nn
@@ -23,7 +24,7 @@ parser.add_argument('--batch_size', default=56, type=int, help='batch size')
 parser.add_argument('--lr', default=0.001, type=float, help='learning rate')
 opt = parser.parse_args()
 
-path = os.path.join(opt.dataset + '_' + opt.model)
+path = os.path.join(opt.dataset + '_TALL')
 
 train_dataset = Activitynet_Train_dataset()
 test_dataset = Activitynet_Test_dataset()
@@ -61,7 +62,7 @@ def train(epoch):
     train_loss = 0
 
     for batch_idx, (images, sentences, offsets) in enumerate(trainloader):
-        images, sentences, offsets = images.cuda(), sentences.cuda(), offsets.cuda()
+        images, sentences, offsets = images.float().cuda(), sentences.float().cuda(), offsets.float().cuda()
 
         # network forward
         outputs = net(images, sentences)
@@ -121,12 +122,11 @@ def test(epoch):
     all_retrievd = 0.0
     all_number = len(test_dataset.movie_names)
     idx = 0
-    for movie_name, movie_slidingclip in zip(test_dataset.movie_names,
-                                             test_dataset.multi_process_load_clip(20)):
+    for movie_name in test_dataset.movie_names:
         idx += 1
         print("%d/%d" % (idx, all_number))
         print("Test movie: " + movie_name + "....loading movie data")
-        movie_clip_featmaps, movie_clip_sentences = movie_slidingclip
+        movie_clip_featmaps, movie_clip_sentences = test_dataset.load_movie_slidingclip(movie_name)
 
         sentence_image_mat = np.zeros([len(movie_clip_sentences), len(movie_clip_featmaps)])
         sentence_image_reg_mat = np.zeros([len(movie_clip_sentences), len(movie_clip_featmaps), 2])
@@ -134,26 +134,17 @@ def test(epoch):
 
             sent_vec = movie_clip_sentences[k][1]
             sent_vec = np.reshape(sent_vec, [1, sent_vec.shape[0]])  # 1,4800
-            sent_vec = torch.from_numpy(sent_vec).cuda()
-
-            VP_spacy_vec = movie_clip_sentences[k][2]
-            VP_spacy_vec = np.reshape(VP_spacy_vec, [1, VP_spacy_vec.shape[0]])
-            VP_spacy_vec = torch.from_numpy(VP_spacy_vec).float().cuda()
+            sent_vec = torch.from_numpy(sent_vec).float().cuda()
 
             for t in range(len(movie_clip_featmaps)):
                 featmap = movie_clip_featmaps[t][1]
                 visual_clip_name = movie_clip_featmaps[t][0]
-                softmax_ = movie_clip_featmaps[t][2]
 
-                start = float(visual_clip_name.split("_")[1])
-                end = float(visual_clip_name.split("_")[2].split("_")[0])
-                conf_score = float(visual_clip_name.split("_")[7])
+                start = float(visual_clip_name.split("_")[-2])
+                end = float(visual_clip_name.split("_")[-1])
 
                 featmap = np.reshape(featmap, [1, featmap.shape[0]])
-                featmap = torch.from_numpy(featmap).cuda()
-
-                softmax_ = np.reshape(softmax_, [1, softmax_.shape[0]])
-                softmax_ = torch.from_numpy(softmax_).cuda()
+                featmap = torch.from_numpy(featmap).float().cuda()
 
                 # network forward
                 outputs = net(featmap, sent_vec)
@@ -162,7 +153,6 @@ def test(epoch):
 
                 sentence_image_mat[k, t] = outputs[0]
 
-                # sentence_image_mat[k, t] = expit(outputs[0]) * conf_score
                 reg_end = end + outputs[2]
                 reg_start = start + outputs[1]
 

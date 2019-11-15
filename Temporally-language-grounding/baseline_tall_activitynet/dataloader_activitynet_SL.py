@@ -103,7 +103,15 @@ class Activitynet_Test_dataset(torch.utils.data.Dataset):
         self.epochs_completed = 0
         self.proposals = os.path.join(self.data_path, "activitynet_v1-3_proposals.hdf5")
         self.c3d_features = os.path.join(self.data_path, "sub_activitynet_v1-3.c3d.hdf5")
-        self.clip_sentence_pairs = pickle.load(open(os.path.join(self.data_path, "activitynet_rl_test_feature_all_glove_embedding_final.pkl"),"rb"), encoding='iso-8859-1')
+        clip_sentence_pairs = pickle.load(open(os.path.join(self.data_path, "activitynet_rl_test_feature_all_glove_embedding_final.pkl"),"rb"), encoding='iso-8859-1')
+        i, test_size = 0, int(len(clip_sentence_pairs)/3)
+        self.clip_sentence_pairs = dict()
+        for k in clip_sentence_pairs:
+            self.clip_sentence_pairs[k] = clip_sentence_pairs[k]
+            i += 1
+            if i > test_size:
+                break
+
         with open(os.path.join(self.data_path,'activity_net.v1-3.min.json'), 'r') as f:
             self.duration = json.load(f)['database']
 

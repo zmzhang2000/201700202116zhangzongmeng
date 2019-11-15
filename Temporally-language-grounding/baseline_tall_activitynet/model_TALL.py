@@ -22,7 +22,7 @@ class TALL(nn.Module):
         super(TALL, self).__init__()
         self.semantic_size = 1024 # the size of visual and semantic comparison size
         self.sentence_embedding_size = 4800
-        self.visual_feature_dim = 4096*3
+        self.visual_feature_dim = 500*3
         self.v2s_lt = nn.Linear(self.visual_feature_dim, self.semantic_size)
         self.s2s_lt = nn.Linear(self.sentence_embedding_size, self.semantic_size)
         self.fc1 = torch.nn.Conv2d(4096, 1000, kernel_size=1, stride=1)
