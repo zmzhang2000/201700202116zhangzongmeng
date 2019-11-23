@@ -8,16 +8,23 @@ import operator
 import torch
 
 def calculate_reward_batch_withstop(Previou_IoU, current_IoU, t):
-    batch_size = len(Previou_IoU)
-    reward = torch.zeros(batch_size)
-
-    for i in range(batch_size):
-        if current_IoU[i] > Previou_IoU[i] and Previou_IoU[i]>=0:
-            reward[i] = 1 -0.001*t
-        elif current_IoU[i] <= Previou_IoU[i] and current_IoU[i]>=0:
-            reward[i] = -0.001*t
-        else:
-            reward[i] = -1 -0.001*t
+    # batch_size = len(Previou_IoU)
+    # reward = torch.zeros(batch_size)
+    #
+    # for i in range(batch_size):
+    #     if current_IoU[i] > Previou_IoU[i] and Previou_IoU[i]>=0:
+    #         reward[i] = 1 -0.001*t
+    #     elif current_IoU[i] <= Previou_IoU[i] and current_IoU[i]>=0:
+    #         reward[i] = -0.001*t
+    #     else:
+    #         reward[i] = -1 -0.001*t
+    reward = torch.where(current_IoU > Previou_IoU,
+                         (1 - 0.001 * t) * torch.ones_like(Previou_IoU).float(),
+                         torch.zeros_like(Previou_IoU)) * Previou_IoU.ge(0).float() + \
+             torch.where(Previou_IoU >= current_IoU,
+                         (-0.001 * t) * torch.ones_like(Previou_IoU).float(),
+                         torch.zeros_like(Previou_IoU)) * current_IoU.ge(0).float()
+    reward = reward + reward.eq(0).float() * (-1 - 0.001 * t)
     return reward
 
 
@@ -33,18 +40,23 @@ def calculate_reward(Previou_IoU, current_IoU, t):
 
 def calculate_RL_IoU_batch(i0, i1):
     # calculate temporal intersection over union
-    batch_size = len(i0)
-    iou_batch = torch.zeros(batch_size)
 
-    for i in range(len(i0)):
-        union = (min(i0[i][0], i1[i][0]), max(i0[i][1], i1[i][1]))
-        inter = (max(i0[i][0], i1[i][0]), min(i0[i][1], i1[i][1]))
-        # if inter[1] < inter[0]:
-        #     iou = 0
-        # else:
-        iou = 1.0*(inter[1]-inter[0])/(union[1]-union[0])
-        iou_batch[i] = iou
-    return iou_batch
+    union = (torch.min(i0[:, 0], i1[:, 0]), torch.max(i0[:, 1], i1[:, 1]))
+    inter = (torch.max(i0[:, 0], i1[:, 0]), torch.min(i0[:, 1], i1[:, 1]))
+    iou = 1.0 * (inter[1] - inter[0]) / (union[1] - union[0])
+    return iou
+    # batch_size = len(i0)
+    # iou_batch = torch.zeros(batch_size)
+    #
+    # for i in range(len(i0)):
+    #     union = (min(i0[i][0], i1[i][0]), max(i0[i][1], i1[i][1]))
+    #     inter = (max(i0[i][0], i1[i][0]), min(i0[i][1], i1[i][1]))
+    #     # if inter[1] < inter[0]:
+    #     #     iou = 0
+    #     # else:
+    #     iou = 1.0*(inter[1]-inter[0])/(union[1]-union[0])
+    #     iou_batch[i] = iou
+    # return iou_batch
 
 def calculate_IoU(i0, i1):
     # calculate temporal intersection over union
@@ -86,8 +98,8 @@ def compute_IoU_recall_top_n_forreg_rl(top_n, iou_thresh, sentence_image_reg_mat
     for k in range(sentence_image_reg_mat.shape[0]):
         gt = sclips[k]
         # print(gt)
-        gt_start = float(gt.split("_")[1])
-        gt_end = float(gt.split("_")[2])
+        gt_start = float(gt.split("_")[-2])
+        gt_end = float(gt.split("_")[-1])
 
         pred_start = sentence_image_reg_mat[k, 0]
         pred_end = sentence_image_reg_mat[k, 1]
@@ -101,8 +113,8 @@ def compute_IoU_recall_top_n_forreg(top_n, iou_thresh, sentence_image_mat, sente
     correct_num = 0.0
     for k in range(sentence_image_mat.shape[0]):
         gt = sclips[k]
-        gt_start = float(gt.split("_")[0])
-        gt_end = float(gt.split("_")[1])
+        gt_start = float(gt.split("_")[1])
+        gt_end = float(gt.split("_")[2])
         #print gt +" "+str(gt_start)+" "+str(gt_end)
         sim_v = [v for v in sentence_image_mat[k]]
         starts = [s for s in sentence_image_reg_mat[k,:,0]]

@@ -50,14 +50,14 @@ class Activitynet_Train_dataset(torch.utils.data.Dataset):
         start_row, end_row = self.correct_win(start_row, end_row, total_row)
         original_feats_1 = np.mean(original_feats[start_row: end_row], axis=0)
 
-        left_start_row = int(start_row - total_row / 5)
+        left_start_row = int(start_row - total_row / 10)
         left_end_row = start_row
         left_start_row, left_end_row = self.correct_win(left_start_row, left_end_row, total_row)
         if left_start_row >= left_end_row:
             print('error1')
         left_context_feat = np.mean(original_feats[left_start_row: left_end_row], axis=0)
 
-        right_end_row = int(end_row + total_row / 5)
+        right_end_row = int(end_row + total_row / 10)
         right_start_row = end_row
         right_start_row, right_end_row = self.correct_win(right_start_row, right_end_row, total_row)
         if right_start_row >= right_end_row:
@@ -82,8 +82,8 @@ class Activitynet_Train_dataset(torch.utils.data.Dataset):
         sentence = sample['sent_skip_thought_vec'][0][0, :self.sent_vec_dim]
 
         # offest
-        p_offset = sample['offset_start']
-        l_offset = sample['offset_end']
+        p_offset = sample['offset_start_norm']
+        l_offset = sample['offset_end_norm']
         offset[0] = p_offset
         offset[1] = l_offset
 
@@ -103,14 +103,7 @@ class Activitynet_Test_dataset(torch.utils.data.Dataset):
         self.epochs_completed = 0
         self.proposals = os.path.join(self.data_path, "activitynet_v1-3_proposals.hdf5")
         self.c3d_features = os.path.join(self.data_path, "sub_activitynet_v1-3.c3d.hdf5")
-        clip_sentence_pairs = pickle.load(open(os.path.join(self.data_path, "activitynet_rl_test_feature_all_glove_embedding_final.pkl"),"rb"), encoding='iso-8859-1')
-        i, test_size = 0, int(len(clip_sentence_pairs)/3)
-        self.clip_sentence_pairs = dict()
-        for k in clip_sentence_pairs:
-            self.clip_sentence_pairs[k] = clip_sentence_pairs[k]
-            i += 1
-            if i > test_size:
-                break
+        self.clip_sentence_pairs = pickle.load(open(os.path.join(self.data_path, "activitynet_rl_test_feature_all_glove_embedding_final.pkl"),"rb"), encoding='iso-8859-1')
 
         with open(os.path.join(self.data_path,'activity_net.v1-3.min.json'), 'r') as f:
             self.duration = json.load(f)['database']
@@ -150,18 +143,14 @@ class Activitynet_Test_dataset(torch.utils.data.Dataset):
         start_row, end_row = self.correct_win(start_row, end_row, total_row)
         original_feats_1 = np.mean(original_feats[start_row: end_row], axis=0)
 
-        left_start_row = int(start_row - total_row / 5)
+        left_start_row = int(start_row - total_row / 10)
         left_end_row = start_row
         left_start_row, left_end_row = self.correct_win(left_start_row, left_end_row, total_row)
-        if left_start_row >= left_end_row:
-            print('error1')
         left_context_feat = np.mean(original_feats[left_start_row: left_end_row], axis=0)
 
-        right_end_row = int(end_row + total_row / 5)
+        right_end_row = int(end_row + total_row / 10)
         right_start_row = end_row
         right_start_row, right_end_row = self.correct_win(right_start_row, right_end_row, total_row)
-        if right_start_row >= right_end_row:
-            print('error2')
         right_context_feat = np.mean(original_feats[right_start_row: right_end_row], axis=0)
 
         return left_context_feat, original_feats_1, right_context_feat
@@ -174,30 +163,17 @@ class Activitynet_Test_dataset(torch.utils.data.Dataset):
 
         for dict_2nd in self.clip_sentence_pairs[movie_name]:
             for dict_3rd in self.clip_sentence_pairs[movie_name][dict_2nd]:
-                sentence_vec_ = dict_3rd['sent_skip_thought_vec'][0][0, :self.sent_vec_dim]
-                movie_clip_sentences.append((dict_2nd, sentence_vec_))
                 duration = self.duration[movie_name[2:]]['duration']
+                sentence_vec_ = dict_3rd['sent_skip_thought_vec'][0][0, :self.sent_vec_dim]
+                #ground truth
+                temp = '_'.join([str(float(x)/duration) for x in dict_2nd.split('_')])
+                movie_clip_sentences.append((temp, sentence_vec_))
                 proposal = h5py.File(self.proposals, 'r')[movie_name]
                 start, end = proposal['segment-init'][0], proposal['segment-end'][0]
                 start_norm, end_norm = start / duration, end / duration
                 # read visual feats
                 left_context_feat, featmap, right_context_feat = self.read_unit_level_feats(movie_name, start_norm, end_norm)
                 image = np.hstack((left_context_feat, featmap, right_context_feat))
-                movie_clip_featmap.append((movie_name+'_'+str(start)+'_'+str(end), image))
+                movie_clip_featmap.append((movie_name+'_'+str(start_norm)+'_'+str(end_norm), image))
 
         return movie_clip_featmap, movie_clip_sentences
-
-if __name__ == "__main__":
-    a = Activitynet_Test_dataset()
-    for i in range(len(a.movie_names)):
-        a.load_movie_slidingclip(a.movie_names[i])
-        print(i)
-    # a = Activitynet_Train_dataset()
-    # print(a.__getitem__(0))
-    # trainloader = torch.utils.data.DataLoader(dataset=a,
-    #                                           batch_size=32,
-    #                                           shuffle=True,
-    #                                           num_workers=4)
-    # for idx, i in enumerate(trainloader):
-    #     print(idx)
-    # print('complete')

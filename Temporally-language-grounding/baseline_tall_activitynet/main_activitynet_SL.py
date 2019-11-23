@@ -18,6 +18,7 @@ from torch.autograd import Variable
 from dataloader_activitynet_SL import Activitynet_Train_dataset, Activitynet_Test_dataset
 from model_TALL import TALL
 
+os.environ['CUDA_VISIBLE_DEVICES'] = '3'
 parser = argparse.ArgumentParser(description='Video Grounding of PyTorch')
 parser.add_argument('--dataset', type=str, default='Charades', help='dataset type')
 parser.add_argument('--batch_size', default=56, type=int, help='batch size')
@@ -25,6 +26,8 @@ parser.add_argument('--lr', default=0.001, type=float, help='learning rate')
 opt = parser.parse_args()
 
 path = os.path.join(opt.dataset + '_TALL')
+if not os.path.exists(path):
+    os.makedirs(path)
 
 train_dataset = Activitynet_Train_dataset()
 test_dataset = Activitynet_Test_dataset()
@@ -66,7 +69,6 @@ def train(epoch):
 
         # network forward
         outputs = net(images, sentences)
-
         # compute alignment and regression loss
         sim_score_mat = outputs[0]
         p_reg_mat = outputs[1]
@@ -84,7 +86,7 @@ def train(epoch):
         #               | 1   1  -1 ...  |
 
         alpha = 1.0 / input_size
-        lambda_regression = 0.01
+        lambda_regression = 1
         batch_para_mat = alpha * all1
         para_mat = I + batch_para_mat
 
@@ -148,7 +150,6 @@ def test(epoch):
 
                 # network forward
                 outputs = net(featmap, sent_vec)
-
                 outputs = outputs.squeeze(1).squeeze(1)
 
                 sentence_image_mat[k, t] = outputs[0]
@@ -225,4 +226,3 @@ if __name__ == '__main__':
         test(epoch)
 
 print("best_R1_IOU5: %0.3f in epoch: %d " % (best_R1_IOU5, best_R1_IOU5_epoch))
-print("best_R5_IOU5: %0.3f in epoch: %d " % (best_R5_IOU5, best_R5_IOU5_epoch))
