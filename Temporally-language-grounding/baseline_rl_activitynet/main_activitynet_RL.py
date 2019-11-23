@@ -77,45 +77,47 @@ best_R5_IOU7_epoch = 0
 best_R5_IOU5_epoch = 0
 
 
-def determine_range_test(action, current_offset):
+def determine_range_test(action, current_offset, ten_unit, num_units):
     abnormal_done = False
     update_offset = np.zeros(2, dtype=np.float32)
     update_offset_norm = np.zeros(2, dtype=np.float32)
 
-    current_offset_start = current_offset[0][0]
-    current_offset_end = current_offset[0][1]
+    current_offset_start = int(current_offset[0][0])
+    current_offset_end = int(current_offset[0][1])
     interval = current_offset_end - current_offset_start
 
+    ten_unit = int(ten_unit)
+
     if action == 0:
-        current_offset_start = current_offset_start + 0.1
-        current_offset_end = current_offset_end + 0.1
+        current_offset_start = current_offset_start + ten_unit
+        current_offset_end = current_offset_end + ten_unit
     elif action == 1:
-        current_offset_start = current_offset_start - 0.1
-        current_offset_end = current_offset_end - 0.1
+        current_offset_start = current_offset_start - ten_unit
+        current_offset_end = current_offset_end - ten_unit
     elif action == 2:
-        current_offset_start = current_offset_start + 0.1
+        current_offset_start = current_offset_start + ten_unit
     elif action == 3:
-        current_offset_start = current_offset_start - 0.1
+        current_offset_start = current_offset_start - ten_unit
     elif action == 4:
-        current_offset_end = current_offset_end + 0.1
+        current_offset_end = current_offset_end + ten_unit
     elif action == 5:
-        current_offset_end = current_offset_end - 0.1
+        current_offset_end = current_offset_end - ten_unit
 
     if current_offset_start < 0:
         current_offset_start = 0
         if current_offset_end < 0:
             abnormal_done = True
 
-    if current_offset_end > 1:
-        current_offset_end = 1
-        if current_offset_start > 1:
+    if current_offset_end > num_units:
+        current_offset_end = num_units
+        if current_offset_start > num_units:
             abnormal_done = True
 
     if current_offset_end <= current_offset_start:
         abnormal_done = True
 
-    current_offset_start_norm = current_offset_start
-    current_offset_end_norm = current_offset_end
+    current_offset_start_norm = current_offset_start / float(num_units - 1)
+    current_offset_end_norm = current_offset_end / float(num_units - 1)
 
     update_offset_norm[0] = current_offset_start_norm
     update_offset_norm[1] = current_offset_end_norm
@@ -132,9 +134,15 @@ def determine_range_test(action, current_offset):
     return current_offset_start, current_offset_end, update_offset, update_offset_norm, abnormal_done
 
 
-def determine_range(action, current_offset):
+
+def determine_range(action, current_offset, ten_unit, num_units):
     batch_size = len(action)
+    num_units = num_units.float()
+    current_offset_start_batch = np.zeros(batch_size, dtype=np.int8)
+    current_offset_end_batch = np.zeros(batch_size, dtype=np.int8)
     abnormal_done_batch = torch.ones(batch_size).cuda()
+    update_offset = torch.zeros(batch_size, 2)
+    update_offset_norm = torch.zeros(batch_size, 2)
 
     action_embedding = torch.tensor([
         [1, 1],
@@ -147,7 +155,8 @@ def determine_range(action, current_offset):
         [0, 0],
         [0, 0]
     ]).float().cuda()
-    offsett_action = F.embedding(action, action_embedding).float() * 0.1
+    ten_unit = ten_unit.float().cuda()
+    offsett_action = F.embedding(action, action_embedding).float() * ten_unit.unsqueeze(-1)
     current_offset_batch = current_offset.long().float()
     current_offset_batch = current_offset_batch + offsett_action
 
@@ -158,22 +167,23 @@ def determine_range(action, current_offset):
                                                  pre_current_offset_start_batch)
 
     pre_current_offset_end_batch = current_offset_batch[:, 1]
-    pre_current_offset_end_batch = torch.where(pre_current_offset_end_batch > 1, 1,
+    pre_current_offset_end_batch = torch.where(pre_current_offset_end_batch > num_units, num_units,
                                                pre_current_offset_end_batch)
     pre_update_offset = torch.cat((
         pre_current_offset_start_batch.unsqueeze(-1),
         pre_current_offset_end_batch.unsqueeze(-1)
     ), 1)
     pre_update_offset_norm = torch.cat((
-        (pre_current_offset_start_batch).unsqueeze(-1),
-        (pre_current_offset_end_batch).unsqueeze(-1)
+        (pre_current_offset_start_batch / (num_units - 1).float()).unsqueeze(-1),
+        (pre_current_offset_end_batch / (num_units - 1).float()).unsqueeze(-1)
     ), 1)
     initial_current_start = current_offset[:, 0]
     initial_current_end = current_offset[:, 1]
+    # print(initial_current_start, initial_current_start.type())
     pre_abnormal_done_batch = torch.where(initial_current_end < 0,
                                           torch.ones_like(abnormal_done_batch),
                                           torch.zeros_like(abnormal_done_batch)) + \
-                              torch.where(initial_current_start.float() > 1,
+                              torch.where(initial_current_start.float() > num_units,
                                           torch.ones_like(abnormal_done_batch),
                                           torch.zeros_like(abnormal_done_batch)) + \
                               torch.where(initial_current_end <= initial_current_start,
@@ -182,7 +192,7 @@ def determine_range(action, current_offset):
                               torch.where(action == 6,
                                           torch.ones_like(abnormal_done_batch),
                                           torch.zeros_like(abnormal_done_batch)) + \
-                              torch.where(pre_current_offset_start_batch > 1,
+                              torch.where(pre_current_offset_start_batch > num_units,
                                           torch.ones_like(abnormal_done_batch),
                                           torch.zeros_like(abnormal_done_batch)) + \
                               torch.where(pre_current_offset_end_batch < 0,
@@ -192,7 +202,8 @@ def determine_range(action, current_offset):
                                           torch.ones_like(abnormal_done_batch),
                                           torch.zeros_like(abnormal_done_batch))
     pre_abnormal_done_batch = pre_abnormal_done_batch.le(0)
-    return pre_current_offset_start_batch, pre_current_offset_end_batch, pre_update_offset, pre_update_offset_norm, pre_abnormal_done_batch
+    return pre_current_offset_start_batch.int(), pre_current_offset_end_batch.int(), pre_update_offset.int(), pre_update_offset_norm, pre_abnormal_done_batch
+
 
 
 # Training
@@ -240,11 +251,10 @@ def train(epoch):
 
             action = prob.multinomial(num_samples=1).data
             log_prob = log_prob.gather(1, action)
-            # action = action.cpu().numpy()[:, 0]
             action = action.squeeze()
             current_offset_start, current_offset_end, current_offset, \
             current_offset_norm, abnormal_done = determine_range(action, \
-                                                                 current_offset, duration/10, duration)
+                                                                 current_offset, ten_unit, num_units)
             # print(current_offset_start)
             if step == 0:
                 Previou_IoU = calculate_RL_IoU_batch(initial_offset_norm, offset_norm)
@@ -417,10 +427,10 @@ def test(epoch):
         global_feature = torch.from_numpy(global_feature).float().cuda().unsqueeze(0)
         original_feats = torch.from_numpy(original_feats).float().cuda().unsqueeze(0)
         initial_feature = torch.from_numpy(initial_feature).float().cuda().unsqueeze(0)
-        initial_offset = torch.from_numpy(initial_offset).cuda().unsqueeze(0)
+        initial_offset = torch.from_numpy(initial_offset).float().cuda().unsqueeze(0)
         initial_offset_norm = torch.from_numpy(initial_offset_norm).float().cuda().unsqueeze(0)
         ten_unit = torch.from_numpy(ten_unit).cuda().unsqueeze(0)
-        num_units = torch.from_numpy(num_units).cuda().unsqueeze(0)
+        num_units = torch.from_numpy(num_units).float().cuda().unsqueeze(0)
 
         print("sentences: " + str(len(movie_clip_sentences)))
 
@@ -452,15 +462,15 @@ def test(epoch):
                     action, current_offset, ten_unit, num_units)
 
                 if not abnormal_done:
-                    current_feature = original_feats[0][(current_offset_start):(current_offset_end + 1)]
+                    current_feature = original_feats[0][int(current_offset_start):int(current_offset_end + 1)]
                     current_feature = torch.mean(current_feature, dim=0)
                     current_feature = current_feature.unsqueeze(0).cuda()
 
                 if action == 6 or abnormal_done == True:
                     break
 
-            sentence_image_reg_mat[k, 0] = current_offset_start * 16
-            sentence_image_reg_mat[k, 1] = current_offset_end * 16
+            sentence_image_reg_mat[k, 0] = current_offset_start / num_units
+            sentence_image_reg_mat[k, 1] = current_offset_end / num_units
 
         sclips = [b[0] for b in movie_clip_sentences]
 

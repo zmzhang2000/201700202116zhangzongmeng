@@ -80,21 +80,18 @@ class Activitynet_Train_dataset(torch.utils.data.Dataset):
 
         # end = samples['frames_num'] + 1
         movie_name = samples['video']
+        duration = samples['duration']
 
         global_feature, original_feats, initial_feature, ten_unit, initial_offset_start, initial_offset_end, initial_offset_start_norm, initial_offset_end_norm, num_units \
             = self.read_video_level_feats(movie_name)
 
+        ten_unit = np.array(ten_unit)
+        num_units = np.array(num_units)
         # print(np.shape(global_feature), np.shape(original_feats), np.shape(initial_feature))
 
         sentence = samples['sent_skip_thought_vec'][0][0]
-        offset_start = samples['offset_start']
-        offset_end = samples['offset_end']
         offset_start_norm = samples['offset_start_norm']
         offset_end_norm = samples['offset_end_norm']
-
-        # offest
-        offset[0] = offset_start
-        offset[1] = offset_end
 
         offset_norm[0] = offset_start_norm
         offset_norm[1] = offset_end_norm
@@ -152,13 +149,13 @@ class Activitynet_Test_dataset(torch.utils.data.Dataset):
         original_feats = c3d_features[movie_name]['c3d_features'][:]
         num_units = original_feats.shape[0]
         ten_unit = int(num_units / 10)
-        four_unit = int(num_units / 4)
-        oneinfour_unit = four_unit
-        threeinfour_unit = num_units - four_unit
 
         global_feature = np.mean(original_feats, axis=0)
 
         # 选取[N/4,3N/4]作为初始边界并提取特征local_feature(取边界内所有unit特征平均)
+        four_unit = int(num_units / 4)
+        oneinfour_unit = four_unit
+        threeinfour_unit = num_units - four_unit
         initial_feature = original_feats[(oneinfour_unit - 1):(threeinfour_unit)]
         initial_feature = np.mean(initial_feature, axis=0)
 
@@ -184,11 +181,9 @@ class Activitynet_Test_dataset(torch.utils.data.Dataset):
         # movie_clip_sentences:(FeatureFileName(clip),sent_skip_thought_vec(sentence))
         for dict_2nd in self.clip_sentence_pairs[movie_name]:
             for dict_3rd in self.clip_sentence_pairs[movie_name][dict_2nd]:
-                token_embeddings = np.concatenate((self.embeddings[0][np.newaxis, :], dict_3rd['glove_embeddings']),
-                                                  axis=0)
                 sentence_vec_ = dict_3rd['sent_skip_thought_vec'][0][0]
-                offset_norm
-                movie_clip_sentences.append((dict_2nd, sentence_vec_))
+                offset = "_".join([str(float(x) / duration) for x in dict_2nd.split('_')])
+                movie_clip_sentences.append((offset, sentence_vec_))
 
         initial_offset[0] = initial_offset_start
         initial_offset[1] = initial_offset_end
@@ -199,17 +194,8 @@ class Activitynet_Test_dataset(torch.utils.data.Dataset):
         return movie_clip_sentences, global_feature, original_feats, initial_feature, initial_offset, initial_offset_norm, ten_unit, num_units
 
 if __name__ == '__main__':
-    # tr = Activitynet_Train_dataset()
-    # trainloader = torch.utils.data.DataLoader(dataset=tr,
-    #                                           batch_size=32,
-    #                                           shuffle=True,
-    #                                           num_workers=4,
-    #                                           pin_memory=True)
-    # for i in trainloader:
-    #     pass
-    # print('train pass')
+    tr = Activitynet_Train_dataset()
+    print(tr.__getitem__(0))
+    print('\n\n')
     te = Activitynet_Test_dataset()
-    for movie_name in te.movie_names:
-        print(movie_name)
-        temp = te.load_movie_slidingclip(movie_name)
-    print('test pass')
+    print(te.load_movie_slidingclip(te.movie_names[0]))
